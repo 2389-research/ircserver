@@ -464,10 +464,9 @@ func (s *Server) handlePrivMsg(client *Client, args string) {
 		return
 	}
 
-	s.logger.LogMessage(client, target, "PRIVMSG", message)
-
 	// Handle multiple targets separated by commas
-	for _, t := range strings.Split(target, ",") {
+	targets := strings.Split(target, ",")
+	for _, t := range targets {
 		t = strings.TrimSpace(t)
 		if t == "" {
 			if err := client.Send(fmt.Sprintf(":server 411 %s :No recipient given", client.nick)); err != nil {
@@ -475,6 +474,7 @@ func (s *Server) handlePrivMsg(client *Client, args string) {
 			}
 			continue
 		}
+		s.logger.LogMessage(client, t, "PRIVMSG", message)
 		s.deliverMessage(client, t, "PRIVMSG", message)
 	}
 }
@@ -642,7 +642,11 @@ func (s *Server) deliverMessage(from *Client, target, msgType, message string) {
 			return
 		}
 
-		if err := to.Send(formattedMsg); err != nil {
+		// Ensure message is delivered synchronously
+		s.mu.RUnlock()
+		err := to.Send(formattedMsg)
+		s.mu.RLock()
+		if err != nil {
 			log.Printf("ERROR: Failed to deliver message to %s: %v", target, err)
 		}
 	}
