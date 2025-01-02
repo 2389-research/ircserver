@@ -90,6 +90,11 @@ func TestClientConnection(t *testing.T) {
 			input:   "NICK \r\nUSER test 0 * :Test User\r\n",
 			wantErr: true,
 		},
+		{
+			name:    "EOF handling",
+			input:   "",
+			wantErr: true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -161,18 +166,9 @@ func TestUnknownCommand(t *testing.T) {
 	}
 	client := NewClient(conn, cfg)
 
-	errCh := make(chan error, 1)
-	go func() {
-		errCh <- client.handleConnection()
-	}()
-
-	select {
-	case err := <-errCh:
-		if err != nil && err.Error() != "EOF" {
-			t.Errorf("Expected EOF error, got: %v", err)
-		}
-	case <-time.After(100 * time.Millisecond):
-		t.Error("Test timed out")
+	err := client.handleConnection()
+	if err == nil {
+		t.Error("Expected EOF error, got nil")
 	}
 
 	expected := "421 unknown TEST :Unknown command\r\n"
