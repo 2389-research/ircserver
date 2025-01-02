@@ -600,10 +600,7 @@ func (s *Server) handleWho(client *Client, args string) {
 
 		for _, member := range channel.GetClients() {
 			// <channel> <username> <host> <server> <nick> <H|G>[*][@|+] :<hopcount> <real name>
-			if err := client.Send(fmt.Sprintf(":server 352 %s %s %s %s server %s H :0 %s",
-				client.nick, target, member.username,
-				member.conn.RemoteAddr().String(),
-				member.nick, member.realname)); err != nil {
+			if err := client.Send(fmt.Sprintf("PING :%d", time.Now().Unix())); err != nil {
 				log.Printf("ERROR: Failed to send WHO response: %v", err)
 			}
 		}
