@@ -1,6 +1,7 @@
 package persistence
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"log"
@@ -84,11 +85,11 @@ func (s *SQLiteStore) LogMessage(ctx context.Context, sender, recipient, msgType
 }
 
 // UpdateUser stores or updates user information
-func (s *SQLiteStore) UpdateUser(nickname, username, realname, ipAddr string) error {
+func (s *SQLiteStore) UpdateUser(ctx context.Context, nickname, username, realname, ipAddr string) error {
 	query := `INSERT OR REPLACE INTO users (nickname, username, realname, ip_address, last_seen)
 			 VALUES (?, ?, ?, ?, ?)`
 	
-	_, err := s.db.Exec(query, nickname, username, realname, ipAddr, time.Now())
+	_, err := s.db.ExecContext(ctx, query, nickname, username, realname, ipAddr, time.Now())
 	if err != nil {
 		log.Printf("ERROR: Failed to update user: %v", err)
 	}
@@ -96,11 +97,11 @@ func (s *SQLiteStore) UpdateUser(nickname, username, realname, ipAddr string) er
 }
 
 // UpdateChannel stores or updates channel information
-func (s *SQLiteStore) UpdateChannel(name, topic string) error {
+func (s *SQLiteStore) UpdateChannel(ctx context.Context, name, topic string) error {
 	query := `INSERT OR REPLACE INTO channels (name, topic, created_at)
 			 VALUES (?, ?, ?)`
 	
-	_, err := s.db.Exec(query, name, topic, time.Now())
+	_, err := s.db.ExecContext(ctx, query, name, topic, time.Now())
 	if err != nil {
 		log.Printf("ERROR: Failed to update channel: %v", err)
 	}

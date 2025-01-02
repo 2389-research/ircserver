@@ -6,11 +6,11 @@ type Store interface {
 	Close() error
 	
 	// LogMessage stores a message in the database
-	LogMessage(sender, recipient, msgType, content string) error
+	LogMessage(ctx context.Context, sender, recipient, msgType, content string) error
 	
 	// UpdateUser stores or updates user information
-	UpdateUser(nickname, username, realname, ipAddr string) error
+	UpdateUser(ctx context.Context, nickname, username, realname, ipAddr string) error
 	
 	// UpdateChannel stores or updates channel information
-	UpdateChannel(name, topic string) error
+	UpdateChannel(ctx context.Context, name, topic string) error
 }
