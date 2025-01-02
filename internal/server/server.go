@@ -99,6 +99,9 @@ func (s *Server) Start() error {
 }
 
 func (s *Server) handleConnection(conn net.Conn) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	// Set initial connection timeouts
 	conn.SetReadDeadline(time.Now().Add(s.config.IRC.ReadTimeout))
 	conn.SetWriteDeadline(time.Now().Add(s.config.IRC.WriteTimeout))
@@ -148,7 +151,7 @@ func (s *Server) handleConnection(conn net.Conn) {
 	}
 }
 
-func (s *Server) handleMessage(client *Client, message string) {
+func (s *Server) handleMessage(ctx context.Context, client *Client, message string) error {
 	if message == "" {
 		return
 	}
@@ -186,11 +189,12 @@ func (s *Server) handleMessage(client *Client, message string) {
 	}
 }
 
-func (s *Server) handleNick(client *Client, args string) {
+func (s *Server) handleNick(client *Client, args string) error {
 	newNick := strings.TrimSpace(args)
 	if newNick == "" {
-		client.Send(":server 431 :No nickname given")
-		return
+		err := NewError(ErrNoNicknameGiven, "No nickname given", nil)
+		client.Send(fmt.Sprintf(":server %s", err.Error()))
+		return err
 	}
 
 	s.mu.Lock()

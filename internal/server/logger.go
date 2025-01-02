@@ -34,17 +34,30 @@ func NewLogger(store persistence.Store) *Logger {
 }
 
 // LogEvent logs a general IRC event
-func (l *Logger) LogEvent(eventType EventType, client *Client, target, details string) {
+func (l *Logger) LogEvent(ctx context.Context, eventType EventType, client *Client, target, details string) error {
 	// Log to console
 	timestamp := time.Now().Format("2006-01-02 15:04:05")
 	logMsg := fmt.Sprintf("[%s] %s: %s -> %s (%s)", 
 		timestamp, eventType, client.String(), target, details)
 	log.Printf("INFO: %s", logMsg)
 
-	// Store in database
+	// Store in database with retry logic
 	if l.store != nil {
-		l.store.LogMessage(client.String(), target, string(eventType), details)
+		var err error
+		for retries := 3; retries > 0; retries-- {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			default:
+				if err = l.store.LogMessage(ctx, client.String(), target, string(eventType), details); err == nil {
+					return nil
+				}
+				time.Sleep(100 * time.Millisecond)
+			}
+		}
+		return fmt.Errorf("failed to log event after retries: %w", err)
 	}
+	return nil
 }
 
 // LogMessage logs chat messages (PRIVMSG/NOTICE)

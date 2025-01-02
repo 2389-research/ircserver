@@ -72,15 +72,15 @@ func createTables(db *sql.DB) error {
 }
 
 // LogMessage stores a message in the database
-func (s *SQLiteStore) LogMessage(sender, recipient, msgType, content string) error {
+func (s *SQLiteStore) LogMessage(ctx context.Context, sender, recipient, msgType, content string) error {
 	query := `INSERT INTO message_logs (timestamp, sender, recipient, message_type, content)
 			 VALUES (?, ?, ?, ?, ?)`
 	
-	_, err := s.db.Exec(query, time.Now(), sender, recipient, msgType, content)
+	_, err := s.db.ExecContext(ctx, query, time.Now(), sender, recipient, msgType, content)
 	if err != nil {
-		log.Printf("ERROR: Failed to log message: %v", err)
+		return fmt.Errorf("failed to log message: %w", err)
 	}
-	return err
+	return nil
 }
 
 // UpdateUser stores or updates user information
