@@ -198,28 +198,73 @@ func TestConcurrentConnections(t *testing.T) {
 }
 
 func TestPingPong(t *testing.T) {
-	cfg := config.DefaultConfig()
-	conn := &mockConn{
-		readData: strings.NewReader("PONG :123456\r\n"),
+	tests := []struct {
+		name     string
+		input    string
+		wantErr  bool
+		wantPong bool
+	}{
+		{
+			name:     "valid PONG response",
+			input:    "PONG :123456\r\n",
+			wantErr:  false,
+			wantPong: true,
+		},
+		{
+			name:     "PONG missing timestamp",
+			input:    "PONG\r\n",
+			wantErr:  false,
+			wantPong: false,
+		},
+		{
+			name:     "multiple valid PING/PONG cycles",
+			input:    "PONG :111111\r\nPONG :222222\r\nPONG :333333\r\n",
+			wantErr:  false,
+			wantPong: true,
+		},
 	}
-	client := NewClient(conn, cfg)
 
-	// Start client processing
-	errCh := make(chan error, 1)
-	go func() {
-		errCh <- client.handleConnection()
-	}()
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := config.DefaultConfig()
+			conn := &mockConn{
+				readData: strings.NewReader(tt.input),
+			}
+			client := NewClient(conn, cfg)
 
-	// Wait briefly for PONG processing
-	time.Sleep(50 * time.Millisecond)
+			// Start client processing
+			errCh := make(chan error, 1)
+			go func() {
+				errCh <- client.handleConnection()
+			}()
 
-	// Verify PONG was received
-	client.mu.Lock()
-	pongTime := client.lastPong
-	client.mu.Unlock()
+			// Wait briefly for PONG processing
+			time.Sleep(50 * time.Millisecond)
 
-	if pongTime.IsZero() {
-		t.Error("PONG was not processed")
+			// Verify PONG was received
+			client.mu.Lock()
+			pongTime := client.lastPong
+			client.mu.Unlock()
+
+			if tt.wantPong && pongTime.IsZero() {
+				t.Error("Expected PONG to be processed but it wasn't")
+			}
+			if !tt.wantPong && !pongTime.IsZero() {
+				t.Error("Expected PONG not to be processed but it was")
+			}
+
+			// Verify client remains connected
+			select {
+			case err := <-errCh:
+				if (err != nil) != tt.wantErr {
+					t.Errorf("handleConnection() error = %v, wantErr %v", err, tt.wantErr)
+				}
+			case <-time.After(100 * time.Millisecond):
+				if tt.wantErr {
+					t.Error("Expected error but connection remained open")
+				}
+			}
+		})
 	}
 }
 

@@ -122,12 +122,17 @@ func (c *Client) pingLoop() {
 				c.conn.Close()
 				return
 			}
+			log.Printf("DEBUG: Successfully sent PING to client %s", c.String())
 
-			// Set/reset ping timeout timer
-			if c.pingTimer != nil {
-				c.pingTimer.Stop()
+			// Only set ping timer if not already active
+			c.mu.Lock()
+			if c.pingTimer == nil {
+				c.pingTimer = time.AfterFunc(180*time.Second, func() {
+					log.Printf("INFO: Client %s timed out - no PONG response within 180 seconds", c.String())
+					c.conn.Close()
+				})
 			}
-			c.pingTimer = time.AfterFunc(10*time.Second, func() {
+			c.mu.Unlock()
 				log.Printf("INFO: Client %s timed out - no PONG response", c.String())
 				c.conn.Close()
 			})
@@ -157,11 +162,18 @@ func (c *Client) handleConnection() error {
 
 		switch cmd {
 		case "PONG":
-			log.Printf("DEBUG: Received PONG from client %s", c.String())
+			if len(parts) < 2 {
+				log.Printf("WARN: Invalid PONG from client %s - missing timestamp", c.String())
+				continue
+			}
+			timestamp := strings.TrimPrefix(parts[1], ":")
+			log.Printf("DEBUG: Received PONG from client %s with timestamp %s", c.String(), timestamp)
+			
 			c.mu.Lock()
 			c.lastPong = time.Now()
 			if c.pingTimer != nil {
 				c.pingTimer.Stop()
+				c.pingTimer = nil
 			}
 			c.mu.Unlock()
 			continue
