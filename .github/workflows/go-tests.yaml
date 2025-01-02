@@ -107,3 +107,30 @@ jobs:
                   fi
             - name: Run tests with race detector
               run: go test -race -v ./...
+
+    integration_test:
+        name: Run Integration Tests
+        runs-on: ubuntu-latest
+        timeout-minutes: 30
+        steps:
+            - name: Check out code
+              uses: actions/checkout@v3.5.3
+            - name: Set up Go
+              uses: actions/setup-go@v4.0.1
+              with:
+                  go-version: "1.23.2"
+            - name: Cache Go modules
+              uses: actions/cache@v3.3.1
+              with:
+                  path: ~/go/pkg/mod
+                  key: ${{ runner.os }}-go-integration-${{ hashFiles('**/go.sum') }}
+                  restore-keys: |
+                      ${{ runner.os }}-go-integration-
+            - name: Verify dependencies
+              run: go mod verify
+            - name: Run go mod tidy
+              run: go mod tidy
+            - name: Install dependencies
+              run: go mod download
+            - name: Run integration tests
+              run: go test -v -tags=integration ./cmd/ircserver
