@@ -13,6 +13,14 @@ import (
 	"ircserver/internal/server"
 )
 
+// getEnv retrieves an environment variable value or returns a fallback value
+func getEnv(key, fallback string) string {
+	if value, ok := os.LookupEnv(key); ok {
+		return value
+	}
+	return fallback
+}
+
 func main() {
 	// CLI flags
 	configPath := flag.String("config", "config.yaml", "path to config file")
