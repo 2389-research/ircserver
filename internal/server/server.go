@@ -14,15 +14,17 @@ import (
 
 // Server represents an IRC server instance
 type Server struct {
-	host      string
-	port      string
-	clients   map[string]*Client
-	channels  map[string]*Channel
-	store     persistence.Store
-	logger    *Logger
-	webServer *WebServer
-	config    *config.Config
-	mu        sync.RWMutex
+	host       string
+	port       string
+	clients    map[string]*Client
+	channels   map[string]*Channel
+	store      persistence.Store
+	logger     *Logger
+	webServer  *WebServer
+	config     *config.Config
+	listener   net.Listener
+	shutdown   chan struct{}
+	mu         sync.RWMutex
 }
 
 // New creates a new IRC server instance
@@ -35,22 +37,56 @@ func New(host, port string, store persistence.Store) *Server {
 		store:     store,
 		logger:    NewLogger(store),
 		webServer: nil,
+		shutdown:  make(chan struct{}),
 	}
 }
 
 // Start begins listening for connections
+// Shutdown gracefully shuts down the server
+func (s *Server) Shutdown() error {
+	close(s.shutdown)
+	
+	// Close listener
+	if s.listener != nil {
+		if err := s.listener.Close(); err != nil {
+			log.Printf("ERROR: Failed to close listener: %v", err)
+		}
+	}
+
+	// Notify all clients
+	s.mu.RLock()
+	for _, client := range s.clients {
+		client.Send("ERROR :Server shutting down")
+		client.conn.Close()
+	}
+	s.mu.RUnlock()
+
+	// Shutdown web server if running
+	if s.webServer != nil {
+		if err := s.webServer.Shutdown(); err != nil {
+			log.Printf("ERROR: Failed to shutdown web server: %v", err)
+		}
+	}
+
+	return nil
+}
+
 func (s *Server) Start() error {
 	addr := fmt.Sprintf("%s:%s", s.host, s.port)
 
-	listener, err := net.Listen("tcp", addr)
+	var err error
+	s.listener, err = net.Listen("tcp", addr)
 	if err != nil {
 		return fmt.Errorf("failed to start server: %v", err)
 	}
-	defer listener.Close()
 
 	log.Printf("INFO: IRC server started and listening on %s", addr)
 
 	for {
+		select {
+		case <-s.shutdown:
+			return nil
+		default:
 		conn, err := listener.Accept()
 		if err != nil {
 			log.Printf("ERROR: Failed to accept connection: %v", err)

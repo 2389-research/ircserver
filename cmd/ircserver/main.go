@@ -2,7 +2,11 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"log"
+	"os"
+	"os/signal"
+	"syscall"
 
 	"ircserver/internal/config"
 	"ircserver/internal/persistence"
@@ -10,13 +14,34 @@ import (
 )
 
 func main() {
+	// CLI flags
 	configPath := flag.String("config", "config.yaml", "path to config file")
+	host := flag.String("host", "", "override server host from config")
+	port := flag.String("port", "", "override server port from config")
+	webPort := flag.String("web-port", "", "override web interface port from config")
+	version := flag.Bool("version", false, "print version and exit")
 	flag.Parse()
+
+	if *version {
+		fmt.Println("IRC Server v1.0.0")
+		os.Exit(0)
+	}
 
 	// Load configuration
 	cfg, err := config.Load(*configPath)
 	if err != nil {
 		log.Fatalf("FATAL: Configuration error: %v", err)
+	}
+
+	// Override config with CLI flags if provided
+	if *host != "" {
+		cfg.Server.Host = *host
+	}
+	if *port != "" {
+		cfg.Server.Port = *port
+	}
+	if *webPort != "" {
+		cfg.Server.WebPort = *webPort
 	}
 
 	// Initialize database
@@ -37,18 +62,36 @@ func main() {
 	if err != nil {
 		log.Fatalf("FATAL: Web server initialization error: %v", err)
 	}
+	srv.SetWebServer(webServer)
 	
+	// Handle graceful shutdown
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+
 	// Start web server in a goroutine
 	go func() {
 		webAddr := ":" + cfg.Server.WebPort
 		log.Printf("INFO: Starting web interface on %s", webAddr)
 		if err := webServer.Start(webAddr); err != nil {
-			log.Fatalf("FATAL: Web server error: %v", err)
+			log.Printf("ERROR: Web server error: %v", err)
 		}
 	}()
 	
-	// Start IRC server
-	if err := srv.Start(); err != nil {
-		log.Fatalf("FATAL: Server error: %v", err)
+	// Start IRC server in a goroutine
+	go func() {
+		if err := srv.Start(); err != nil {
+			log.Printf("ERROR: Server error: %v", err)
+		}
+	}()
+
+	// Wait for shutdown signal
+	sig := <-sigChan
+	log.Printf("INFO: Received signal %v, initiating shutdown...", sig)
+
+	// Graceful shutdown
+	if err := srv.Shutdown(); err != nil {
+		log.Printf("ERROR: Shutdown error: %v", err)
 	}
+
+	log.Println("INFO: Server shutdown complete")
 }
