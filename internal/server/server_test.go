@@ -33,11 +33,15 @@ func TestChannelOperations(t *testing.T) {
 		want    bool
 	}{
 		{"valid channel", "#test", true},
-		{"invalid no hash", "test", false},
+		{"valid ampersand channel", "&test", true},
+		{"invalid no prefix", "test", false},
 		{"invalid empty", "", false},
 		{"invalid spaces", "#test channel", false},
+		{"invalid comma", "#test,channel", false},
+		{"invalid control-G", "#test\aname", false},
 		{"valid with numbers", "#test123", true},
-		{"valid with underscore", "#test_channel", true},
+		{"valid with special chars", "#test-._[]{}\\`", true},
+		{"invalid too long", "#" + strings.Repeat("a", 200), false},
 	}
 
 	cfg := config.DefaultConfig()
@@ -67,6 +71,49 @@ func TestChannelOperations(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestJoinResponseMessages(t *testing.T) {
+	cfg := config.DefaultConfig()
+	store := &mockStore{}
+	srv := New("localhost", "0", store, cfg)
+
+	conn := &mockConn{readData: strings.NewReader("")}
+	client := NewClient(conn, cfg)
+	client.nick = "user1"
+
+	// Test joining channel with no topic
+	srv.handleJoin(client, "#test")
+	
+	output := conn.writeData.String()
+	if !strings.Contains(output, "JOIN #test") {
+		t.Error("Expected JOIN confirmation message")
+	}
+	if !strings.Contains(output, "331") || !strings.Contains(output, "No topic is set") {
+		t.Error("Expected no topic message")
+	}
+	if !strings.Contains(output, "353") || !strings.Contains(output, "user1") {
+		t.Error("Expected names list")
+	}
+	if !strings.Contains(output, "366") {
+		t.Error("Expected end of names list")
+	}
+
+	// Reset connection buffer
+	conn.writeData.Reset()
+
+	// Test joining channel with topic
+	channel := srv.channels["#test"]
+	channel.SetTopic("Test Topic")
+	
+	client2 := NewClient(&mockConn{readData: strings.NewReader("")}, cfg)
+	client2.nick = "user2"
+	srv.handleJoin(client2, "#test")
+
+	output = client2.conn.(*mockConn).writeData.String()
+	if !strings.Contains(output, "332") || !strings.Contains(output, "Test Topic") {
+		t.Error("Expected topic message")
 	}
 }
 

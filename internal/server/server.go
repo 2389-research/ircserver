@@ -355,10 +355,15 @@ func (s *Server) handleJoin(client *Client, args string) {
 			log.Printf("ERROR: Failed to broadcast join message: %v", err)
 		}
 
-		// Send channel topic if it exists
-		if topic := channel.GetTopic(); topic != "" {
+		// Always send topic reply - either the topic or no topic message
+		topic := channel.GetTopic()
+		if topic != "" {
 			if err := client.Send(fmt.Sprintf(":server 332 %s %s :%s", client.nick, channelName, topic)); err != nil {
 				log.Printf("ERROR: Failed to send channel topic: %v", err)
+			}
+		} else {
+			if err := client.Send(fmt.Sprintf(":server 331 %s %s :No topic is set", client.nick, channelName)); err != nil {
+				log.Printf("ERROR: Failed to send no topic message: %v", err)
 			}
 		}
 
