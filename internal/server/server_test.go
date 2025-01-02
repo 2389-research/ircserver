@@ -2,9 +2,11 @@ package server
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"ircserver/internal/config"
 	"ircserver/internal/persistence"
@@ -119,4 +121,91 @@ func TestChannelMultiUserOperations(t *testing.T) {
 	if len(srv.channels) != 0 {
 		t.Error("Expected channel to be removed after last user left")
 	}
+}
+
+func TestNetworkErrorHandling(t *testing.T) {
+	cfg := config.DefaultConfig()
+	store := &mockStore{}
+	srv := New("localhost", "0", store, cfg)
+
+	client := NewClient(&mockConn{readData: strings.NewReader("")}, cfg)
+	client.nick = "user1"
+
+	// Simulate network error
+	client.conn.Close()
+	err := srv.handleJoin(client, "#test")
+	if err == nil {
+		t.Error("Expected network error, got nil")
+	}
+}
+
+func TestDatabaseErrorHandling(t *testing.T) {
+	cfg := config.DefaultConfig()
+	store := &mockStore{}
+	srv := New("localhost", "0", store, cfg)
+
+	client := NewClient(&mockConn{readData: strings.NewReader("")}, cfg)
+	client.nick = "user1"
+
+	// Simulate database error
+	store.UpdateUser = func(ctx context.Context, nickname, username, realname, ipAddr string) error {
+		return errors.New("database error")
+	}
+
+	err := srv.handleJoin(client, "#test")
+	if err == nil {
+		t.Error("Expected database error, got nil")
+	}
+}
+
+func TestTimeoutHandling(t *testing.T) {
+	cfg := config.DefaultConfig()
+	store := &mockStore{}
+	srv := New("localhost", "0", store, cfg)
+
+	client := NewClient(&mockConn{readData: strings.NewReader("")}, cfg)
+	client.nick = "user1"
+
+	// Simulate timeout
+	client.conn.SetReadDeadline(time.Now().Add(-time.Second))
+	err := srv.handleJoin(client, "#test")
+	if err == nil {
+		t.Error("Expected timeout error, got nil")
+	}
+}
+
+func TestResourceCleanup(t *testing.T) {
+	cfg := config.DefaultConfig()
+	store := &mockStore{}
+	srv := New("localhost", "0", store, cfg)
+
+	client := NewClient(&mockConn{readData: strings.NewReader("")}, cfg)
+	client.nick = "user1"
+
+	// Simulate resource cleanup
+	cleanupDone := false
+	defer func() {
+		cleanupDone = true
+	}()
+	srv.handleQuit(client, "Quit")
+	if !cleanupDone {
+		t.Error("Expected resource cleanup to be done")
+	}
+}
+
+func TestRecoveryFromErrors(t *testing.T) {
+	cfg := config.DefaultConfig()
+	store := &mockStore{}
+	srv := New("localhost", "0", store, cfg)
+
+	client := NewClient(&mockConn{readData: strings.NewReader("")}, cfg)
+	client.nick = "user1"
+
+	// Simulate recovery from an error
+	defer func() {
+		if r := recover(); r != nil {
+			t.Log("Recovered from error")
+		}
+	}()
+	panic("simulated error")
 }

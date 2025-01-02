@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"ircserver/internal/config"
+	"errors"
 )
 
 // mockConn implements net.Conn interface for testing.
@@ -106,6 +107,51 @@ func TestClientConnection(t *testing.T) {
 			name:    "EOF handling",
 			input:   "",
 			wantErr: true,
+		},
+		{
+			name:    "network error handling",
+			input:   "NICK validnick\r\nUSER test 0 * :Test User\r\n",
+			nick:    "validnick",
+			wantErr: true,
+			expectedResponses: []string{
+				"ERROR: Read error for client validnick: network error\r\n",
+			},
+		},
+		{
+			name:    "database error handling",
+			input:   "NICK validnick\r\nUSER test 0 * :Test User\r\n",
+			nick:    "validnick",
+			wantErr: true,
+			expectedResponses: []string{
+				"ERROR: Failed to store user info: database error\r\n",
+			},
+		},
+		{
+			name:    "timeout handling",
+			input:   "NICK validnick\r\nUSER test 0 * :Test User\r\n",
+			nick:    "validnick",
+			wantErr: true,
+			expectedResponses: []string{
+				"INFO: Client validnick timed out after 30s of inactivity\r\n",
+			},
+		},
+		{
+			name:    "resource cleanup",
+			input:   "NICK validnick\r\nUSER test 0 * :Test User\r\n",
+			nick:    "validnick",
+			wantErr: true,
+			expectedResponses: []string{
+				"INFO: Client validnick disconnected\r\n",
+			},
+		},
+		{
+			name:    "recovery from errors",
+			input:   "NICK validnick\r\nUSER test 0 * :Test User\r\n",
+			nick:    "validnick",
+			wantErr: true,
+			expectedResponses: []string{
+				"Recovered from error\r\n",
+			},
 		},
 	}
 

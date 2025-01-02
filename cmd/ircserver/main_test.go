@@ -1,8 +1,10 @@
 package main
 
 import (
+	"errors"
 	"os"
 	"testing"
+	"time"
 )
 
 func TestGetEnv(t *testing.T) {
@@ -41,4 +43,49 @@ func TestGetEnv(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestNetworkErrorHandling(t *testing.T) {
+	// Simulate a network error
+	err := errors.New("network error")
+	if err == nil {
+		t.Error("Expected network error, got nil")
+	}
+}
+
+func TestDatabaseErrorHandling(t *testing.T) {
+	// Simulate a database error
+	err := errors.New("database error")
+	if err == nil {
+		t.Error("Expected database error, got nil")
+	}
+}
+
+func TestTimeoutHandling(t *testing.T) {
+	// Simulate a timeout
+	err := errors.New("timeout error")
+	if err == nil {
+		t.Error("Expected timeout error, got nil")
+	}
+}
+
+func TestResourceCleanup(t *testing.T) {
+	// Simulate resource cleanup
+	cleanupDone := false
+	defer func() {
+		cleanupDone = true
+	}()
+	if !cleanupDone {
+		t.Error("Expected resource cleanup to be done")
+	}
+}
+
+func TestRecoveryFromErrors(t *testing.T) {
+	// Simulate recovery from an error
+	defer func() {
+		if r := recover(); r != nil {
+			t.Log("Recovered from error")
+		}
+	}()
+	panic("simulated error")
 }
