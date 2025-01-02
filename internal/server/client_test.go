@@ -82,7 +82,10 @@ func TestClientConnection(t *testing.T) {
 		{
 			name:    "invalid nick character",
 			input:   "NICK invalid@nick\r\nUSER test 0 * :Test User\r\n",
-			wantErr: true,
+			wantErr: false,
+			expectedResponses: []string{
+				"432 * :Erroneous nickname\r\n",
+			},
 		},
 		{
 			name:    "missing USER command",
