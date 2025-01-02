@@ -87,14 +87,14 @@ func (s *Server) Start() error {
 		case <-s.shutdown:
 			return nil
 		default:
-		conn, err := listener.Accept()
-		if err != nil {
-			log.Printf("ERROR: Failed to accept connection: %v", err)
-			continue
-		}
+			conn, err := s.listener.Accept()
+			if err != nil {
+				log.Printf("ERROR: Failed to accept connection: %v", err)
+				continue
+			}
 
-		go s.handleConnection(conn)
-	}
+			go s.handleConnection(conn)
+		}
 }
 
 func (s *Server) handleConnection(conn net.Conn) {
