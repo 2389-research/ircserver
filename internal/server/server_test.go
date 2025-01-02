@@ -5,17 +5,17 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"ircserver/internal/persistence"
 )
 
-// mockStore implements a no-op store for testing
+// mockStore implements persistence.Store interface for testing
 type mockStore struct{}
 
-func (m *mockStore) Close() error                       { return nil }
-func (m *mockStore) LogMessage(channel, nick, msg string) error { return nil }
+func (m *mockStore) Close() error                                                     { return nil }
+func (m *mockStore) LogMessage(channel, nick, msg string) error                       { return nil }
 func (m *mockStore) UpdateUserInfo(nickname, username, realname, ipAddr string) error { return nil }
-func (m *mockStore) UpdateChannelInfo(name, topic string) error { return nil }
+func (m *mockStore) UpdateChannelInfo(name, topic string) error                       { return nil }
+func (m *mockStore) GetUserInfo(nickname string) (string, string, string, error)      { return "", "", "", nil }
+func (m *mockStore) GetChannelInfo(name string) (string, error)                       { return "", nil }
 
 func TestChannelOperations(t *testing.T) {
 	store := &mockStore{}
