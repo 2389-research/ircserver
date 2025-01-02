@@ -110,3 +110,9 @@ func (s *SQLiteStore) UpdateChannel(ctx context.Context, name, topic string) err
 	}
 	return err
 }
+
+// QueryRow executes a query that returns a single row and scans the result into dest.
+// This method is primarily intended for testing.
+func (s *SQLiteStore) QueryRow(ctx context.Context, query string, args ...interface{}) *sql.Row {
+	return s.db.QueryRowContext(ctx, query, args...)
+}

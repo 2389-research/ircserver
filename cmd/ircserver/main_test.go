@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -68,7 +69,7 @@ func TestUserPersistence(t *testing.T) {
 
 	var nickname, username, realname, ipAddress string
 	var lastSeen time.Time
-	err = store.db.QueryRowContext(ctx, "SELECT nickname, username, realname, ip_address, last_seen FROM users WHERE nickname = ?", "testuser").Scan(&nickname, &username, &realname, &ipAddress, &lastSeen)
+	err = store.QueryRow(ctx, "SELECT nickname, username, realname, ip_address, last_seen FROM users WHERE nickname = ?", "testuser").Scan(&nickname, &username, &realname, &ipAddress, &lastSeen)
 	if err != nil {
 		t.Fatalf("Failed to query user: %v", err)
 	}
@@ -90,7 +91,7 @@ func TestChannelPersistence(t *testing.T) {
 
 	var name, topic string
 	var createdAt time.Time
-	err = store.db.QueryRowContext(ctx, "SELECT name, topic, created_at FROM channels WHERE name = ?", "#testchannel").Scan(&name, &topic, &createdAt)
+	err = store.QueryRow(ctx, "SELECT name, topic, created_at FROM channels WHERE name = ?", "#testchannel").Scan(&name, &topic, &createdAt)
 	if err != nil {
 		t.Fatalf("Failed to query channel: %v", err)
 	}
@@ -112,7 +113,7 @@ func TestMessageLogging(t *testing.T) {
 
 	var timestamp time.Time
 	var sender, recipient, msgType, content string
-	err = store.db.QueryRowContext(ctx, "SELECT timestamp, sender, recipient, message_type, content FROM message_logs WHERE sender = ?", "sender").Scan(&timestamp, &sender, &recipient, &msgType, &content)
+	err = store.QueryRow(ctx, "SELECT timestamp, sender, recipient, message_type, content FROM message_logs WHERE sender = ?", "sender").Scan(&timestamp, &sender, &recipient, &msgType, &content)
 	if err != nil {
 		t.Fatalf("Failed to query message log: %v", err)
 	}
@@ -172,7 +173,7 @@ func TestConcurrentDatabaseAccess(t *testing.T) {
 	wg.Wait()
 
 	var count int
-	err := store.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM users").Scan(&count)
+	err := store.QueryRow(ctx, "SELECT COUNT(*) FROM users").Scan(&count)
 	if err != nil {
 		t.Fatalf("Failed to count users: %v", err)
 	}
