@@ -46,7 +46,7 @@ func TestDashboardDataRetrieval(t *testing.T) {
 }
 
 func TestMessageSendingViaWeb(t *testing.T) {
-	ws := setupTestWebServer()
+	ws := setupTestWebServer(t)
 
 	msg := `{"target": "#test", "content": "Hello, world!"}`
 	req, err := http.NewRequest("POST", "/api/send", strings.NewReader(msg))
@@ -74,7 +74,7 @@ func TestMessageSendingViaWeb(t *testing.T) {
 }
 
 func TestConcurrentWebRequests(t *testing.T) {
-	ws := setupTestWebServer()
+	ws := setupTestWebServer(t)
 
 	var wg sync.WaitGroup
 	numRequests := 10
