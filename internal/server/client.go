@@ -173,7 +173,9 @@ func (c *Client) handleConnection() error {
 				c.pingTimer = nil
 			}
 			c.mu.Unlock()
-			continue
+			
+			// Don't continue - let the connection stay alive
+			// for subsequent commands
 			
 		case "NICK":
 			var nick string
