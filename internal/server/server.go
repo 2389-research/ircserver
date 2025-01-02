@@ -486,7 +486,7 @@ func (s *Server) handlePart(client *Client, args string) {
 			delete(client.channels, channelName)
 
 			// Check if channel is empty and remove it if so
-			if ch.IsEmpty() {
+			if len(ch.Members) == 0 {
 				delete(s.channels, channelName)
 				ctx := context.Background()
 				if err := s.logger.LogEvent(ctx, EventChannelDelete, client, channelName, "Channel removed - last user left"); err != nil {
