@@ -3,7 +3,6 @@ package server
 import (
 	"bufio"
 	"net"
-	"strings"
 	"sync"
 )
 

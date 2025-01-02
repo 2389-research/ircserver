@@ -185,16 +185,16 @@ func (s *Server) handlePart(client *Client, args string) {
 
 	channels := strings.Split(args, ",")
 	for _, channel := range channels {
-		channel = strings.TrimSpace(channel)
+		channelName := strings.TrimSpace(channel)
 		s.mu.Lock()
-		if s.channels[channel] != nil {
-			delete(s.channels[channel], client.nick)
-			delete(client.channels, channel)
+		if s.channels[channelName] != nil {
+			delete(s.channels[channelName], client.nick)
+			delete(client.channels, channelName)
 			s.mu.Unlock()
-			s.broadcastToChannel(channel, fmt.Sprintf(":%s PART %s", client, channel))
+			s.broadcastToChannel(channelName, fmt.Sprintf(":%s PART %s", client, channelName))
 		} else {
 			s.mu.Unlock()
-			client.Send(fmt.Sprintf(":server 403 %s %s :No such channel", client.nick, channel))
+			client.Send(fmt.Sprintf(":server 403 %s %s :No such channel", client.nick, channelName))
 		}
 	}
 }
