@@ -8,6 +8,9 @@ on:
             - "**.md"
             - ".gitignore"
             - ".mise.toml"
+permissions:
+    contents: write
+    actions: write
 jobs:
     create_release:
         runs-on: ubuntu-latest
