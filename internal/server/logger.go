@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"time"
@@ -70,7 +71,10 @@ func (l *Logger) LogMessage(from *Client, target, msgType, content string) {
 
 	// Store in database
 	if l.store != nil {
-		l.store.LogMessage(from.String(), target, msgType, content)
+		ctx := context.Background()
+		if err := l.store.LogMessage(ctx, from.String(), target, msgType, content); err != nil {
+			l.LogError("Failed to log message", err)
+		}
 	}
 }
 

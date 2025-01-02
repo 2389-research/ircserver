@@ -5,6 +5,9 @@ import (
 	"log"
 	"net"
 	"sync"
+	"time"
+
+	"ircserver/internal/config"
 )
 
 // Client represents a connected IRC client
