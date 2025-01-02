@@ -23,8 +23,8 @@ func (t *testClient) Send(msg string) error {
 	return t.Client.Send(msg)
 }
 
-// Ensure testClient satisfies the Client interface
-var _ *Client = (*testClient)(nil)
+// Ensure testClient implements necessary methods
+var _ interface{ Send(string) error } = (*testClient)(nil)
 
 func newTestClient(nick string, cfg *config.Config) *testClient {
 	client := NewClient(&mockConn{readData: strings.NewReader("")}, cfg)
