@@ -19,9 +19,7 @@ const (
 	ErrNoRecipient      = "411" // ERR_NORECIPIENT
 	ErrNoTextToSend     = "412" // ERR_NOTEXTTOSEND
 	ErrNotOnChannel     = "442" // ERR_NOTONCHANNEL
-	ErrNotInChannel     = "442" // ERR_NOTONCHANNEL (alias)
 	ErrUserOnChannel    = "443" // ERR_USERONCHANNEL
-	ErrNicknameInUse    = "433" // ERR_NICKNAMEINUSE
 	
 	// Server Errors
 	ErrNoSuchNick      = "401" // ERR_NOSUCHNICK
