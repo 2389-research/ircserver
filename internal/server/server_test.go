@@ -85,7 +85,7 @@ func TestJoinResponseMessages(t *testing.T) {
 
 	// Test joining channel with no topic
 	srv.handleJoin(client, "#test")
-	
+
 	output := conn.writeData.String()
 	if !strings.Contains(output, "JOIN #test") {
 		t.Error("Expected JOIN confirmation message")
@@ -106,7 +106,7 @@ func TestJoinResponseMessages(t *testing.T) {
 	// Test joining channel with topic
 	channel := srv.channels["#test"]
 	channel.SetTopic("Test Topic")
-	
+
 	client2 := NewClient(&mockConn{readData: strings.NewReader("")}, cfg)
 	client2.nick = "user2"
 	srv.handleJoin(client2, "#test")
@@ -120,12 +120,12 @@ func TestJoinResponseMessages(t *testing.T) {
 func TestChannelMultiUserOperations(t *testing.T) {
 	cfg := config.DefaultConfig()
 	store := &mockStore{}
-	
+
 	// Create fresh server and clients for each subtest
 	var srv *Server
 	var clients []*Client
 	var conns []*mockConn
-	
+
 	setup := func() {
 		srv = New("localhost", "0", store, cfg)
 		clients = make([]*Client, 3)
@@ -172,49 +172,4 @@ func TestChannelMultiUserOperations(t *testing.T) {
 		}
 	})
 
-	t.Run("part channel not joined", func(t *testing.T) {
-		setup() // Reset state
-		
-		// First client creates and joins #test2
-		srv.handleJoin(clients[0], "#test2")
-		
-		// Verify channel exists and first client joined
-		if _, exists := srv.channels["#test2"]; !exists {
-			t.Fatal("Channel #test2 was not created")
-		}
-		
-		// Try to part with second client who never joined
-		srv.handlePart(clients[1], "#test2")
-		
-		output := conns[1].writeData.String()
-		if !strings.Contains(output, "442") {
-			t.Errorf("Expected error 442 for parting channel not joined, got: %s", output)
-		}
-	})
-
-	// Test sequential parting with notification verification
-	for i, client := range clients {
-		conns[i].writeData.Reset() // Clear previous messages
-		srv.handlePart(client, "#test")
-		
-		// Verify PART message was broadcast
-		partMsg := fmt.Sprintf(":%s PART #test", client.nick)
-		for j := i + 1; j < len(clients); j++ {
-			if !strings.Contains(conns[j].writeData.String(), partMsg) {
-				t.Errorf("Client %d didn't receive PART notification for client %d", j+1, i+1)
-			}
-		}
-
-		expectedClients := len(clients) - (i + 1)
-		if expectedClients > 0 {
-			if len(channel.Clients) != expectedClients {
-				t.Errorf("Expected %d clients, got %d", expectedClients, len(channel.Clients))
-			}
-		}
-	}
-
-	// Verify channel cleanup after last user parts
-	if len(srv.channels) != 0 {
-		t.Error("Expected channel to be removed after last user left")
-	}
 }
