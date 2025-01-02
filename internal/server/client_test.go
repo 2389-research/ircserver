@@ -232,6 +232,7 @@ func TestPingTimeout(t *testing.T) {
 
 	// Override ping interval for testing
 	pingInterval := 100 * time.Millisecond
+	timestamp := fmt.Sprintf("%d", time.Now().Unix())
 	
 	// Start ping loop with shorter interval
 	go func() {
