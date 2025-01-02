@@ -623,8 +623,7 @@ func (s *Server) deliverMessage(from *Client, target, msgType, message string) {
 	}
 
 	if strings.HasPrefix(target, "#") {
-		channel, exists := s.channels[target]
-		if !exists {
+		if _, exists := s.channels[target]; !exists {
 			if err := from.Send(fmt.Sprintf(":server 403 %s %s :No such channel", from.nick, target)); err != nil {
 				log.Printf("ERROR: Failed to send no such channel error: %v", err)
 			}
