@@ -13,24 +13,26 @@ import (
 
 // Server represents an IRC server instance
 type Server struct {
-	host     string
-	port     string
-	clients  map[string]*Client
-	channels map[string]*Channel
-	store    persistence.Store
-	logger   *Logger
-	mu       sync.RWMutex
+	host      string
+	port      string
+	clients   map[string]*Client
+	channels  map[string]*Channel
+	store     persistence.Store
+	logger    *Logger
+	webServer *WebServer
+	mu        sync.RWMutex
 }
 
 // New creates a new IRC server instance
 func New(host, port string, store persistence.Store) *Server {
 	return &Server{
-		host:     host,
-		port:     port,
-		clients:  make(map[string]*Client),
-		channels: make(map[string]*Channel),
-		store:    store,
-		logger:   NewLogger(store),
+		host:      host,
+		port:      port,
+		clients:   make(map[string]*Client),
+		channels:  make(map[string]*Channel),
+		store:     store,
+		logger:    NewLogger(store),
+		webServer: nil,
 	}
 }
 
@@ -360,6 +362,13 @@ func (s *Server) handleWho(client *Client, args string) {
 }
 
 func (s *Server) deliverMessage(from *Client, target, msgType, message string) {
+	// Track message in web interface if available
+	s.mu.RLock()
+	if s.webServer != nil {
+		s.webServer.AddMessage(from.String(), target, msgType, message)
+	}
+	s.mu.RUnlock()
+
 	if strings.HasPrefix(target, "#") {
 		s.mu.RLock()
 		if _, exists := s.channels[target]; exists {
@@ -391,6 +400,13 @@ func (s *Server) broadcastToChannel(channelName string, message string) {
 			client.Send(message)
 		}
 	}
+}
+
+// SetWebServer sets the web server reference
+func (s *Server) SetWebServer(ws *WebServer) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.webServer = ws
 }
 
 func (s *Server) removeClient(client *Client) {

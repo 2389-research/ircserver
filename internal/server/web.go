@@ -49,10 +49,14 @@ func NewWebServer(ircServer *Server) (*WebServer, error) {
 		return nil, err
 	}
 
-	return &WebServer{
+	ws := &WebServer{
 		ircServer: ircServer,
 		templates: tmpl,
-	}, nil
+		messages:  make([]MessageInfo, 0),
+	}
+	
+	ircServer.SetWebServer(ws)
+	return ws, nil
 }
 
 func (ws *WebServer) Start(addr string) error {
