@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"os"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -162,8 +163,8 @@ func TestConcurrentDatabaseAccess(t *testing.T) {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			nickname := "user" + string(i)
-			err := store.UpdateUser(ctx, nickname, nickname, "User "+string(i), "127.0.0.1")
+			nickname := "user" + strconv.Itoa(i)
+			err := store.UpdateUser(ctx, nickname, nickname, "User "+strconv.Itoa(i), "127.0.0.1")
 			if err != nil {
 				t.Errorf("Failed to update user %d: %v", i, err)
 			}
