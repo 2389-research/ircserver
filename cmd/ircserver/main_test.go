@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"ircserver/internal/persistence"
+	"ircserver/internal/config"
+	"ircserver/internal/server"
 )
 
 func TestGetEnv(t *testing.T) {
@@ -168,5 +170,145 @@ func TestErrorHandling(t *testing.T) {
 		}()
 
 		panic("Simulated panic")
+	})
+}
+
+func TestIntegration(t *testing.T) {
+	t.Run("FullClientLifecycle", func(t *testing.T) {
+		// Setup server and client
+		cfg := config.DefaultConfig()
+		store := setupTestDB(t)
+		srv := server.New("localhost", "6667", store, cfg)
+		go srv.Start()
+		defer srv.Shutdown()
+
+		conn, err := net.Dial("tcp", "localhost:6667")
+		if err != nil {
+			t.Fatalf("Failed to connect to server: %v", err)
+		}
+		defer conn.Close()
+
+		// Simulate client actions
+		client := server.NewClient(conn, cfg)
+		client.Send("NICK testuser")
+		client.Send("USER testuser 0 * :Test User")
+		client.Send("JOIN #testchannel")
+		client.Send("PRIVMSG #testchannel :Hello, world!")
+		client.Send("QUIT")
+
+		// Verify server state
+		if len(srv.Clients()) != 0 {
+			t.Errorf("Expected no clients, got %d", len(srv.Clients()))
+		}
+		if len(srv.Channels()) != 0 {
+			t.Errorf("Expected no channels, got %d", len(srv.Channels()))
+		}
+	})
+
+	t.Run("MultipleClientsInteraction", func(t *testing.T) {
+		// Setup server and clients
+		cfg := config.DefaultConfig()
+		store := setupTestDB(t)
+		srv := server.New("localhost", "6667", store, cfg)
+		go srv.Start()
+		defer srv.Shutdown()
+
+		conn1, err := net.Dial("tcp", "localhost:6667")
+		if err != nil {
+			t.Fatalf("Failed to connect to server: %v", err)
+		}
+		defer conn1.Close()
+
+		conn2, err := net.Dial("tcp", "localhost:6667")
+		if err != nil {
+			t.Fatalf("Failed to connect to server: %v", err)
+		}
+		defer conn2.Close()
+
+		// Simulate client actions
+		client1 := server.NewClient(conn1, cfg)
+		client1.Send("NICK user1")
+		client1.Send("USER user1 0 * :User One")
+		client1.Send("JOIN #testchannel")
+
+		client2 := server.NewClient(conn2, cfg)
+		client2.Send("NICK user2")
+		client2.Send("USER user2 0 * :User Two")
+		client2.Send("JOIN #testchannel")
+		client2.Send("PRIVMSG #testchannel :Hello from user2")
+
+		// Verify interaction
+		if len(srv.Clients()) != 2 {
+			t.Errorf("Expected 2 clients, got %d", len(srv.Clients()))
+		}
+		if len(srv.Channels()) != 1 {
+			t.Errorf("Expected 1 channel, got %d", len(srv.Channels()))
+		}
+	})
+
+	t.Run("PersistenceAcrossRestarts", func(t *testing.T) {
+		// Setup server and client
+		cfg := config.DefaultConfig()
+		store := setupTestDB(t)
+		srv := server.New("localhost", "6667", store, cfg)
+		go srv.Start()
+
+		conn, err := net.Dial("tcp", "localhost:6667")
+		if err != nil {
+			t.Fatalf("Failed to connect to server: %v", err)
+		}
+		defer conn.Close()
+
+		// Simulate client actions
+		client := server.NewClient(conn, cfg)
+		client.Send("NICK testuser")
+		client.Send("USER testuser 0 * :Test User")
+		client.Send("JOIN #testchannel")
+		client.Send("PRIVMSG #testchannel :Hello, world!")
+
+		// Shutdown and restart server
+		srv.Shutdown()
+		srv = server.New("localhost", "6667", store, cfg)
+		go srv.Start()
+		defer srv.Shutdown()
+
+		// Verify persistence
+		if len(srv.Clients()) != 0 {
+			t.Errorf("Expected no clients, got %d", len(srv.Clients()))
+		}
+		if len(srv.Channels()) != 1 {
+			t.Errorf("Expected 1 channel, got %d", len(srv.Channels()))
+		}
+	})
+
+	t.Run("WebInterfaceIntegration", func(t *testing.T) {
+		// Setup server and web interface
+		cfg := config.DefaultConfig()
+		store := setupTestDB(t)
+		srv := server.New("localhost", "6667", store, cfg)
+		webSrv, err := server.NewWebServer(srv)
+		if err != nil {
+			t.Fatalf("Failed to create web server: %v", err)
+		}
+		go srv.Start()
+		go webSrv.Start(":8080")
+		defer srv.Shutdown()
+		defer webSrv.Shutdown()
+
+		// Simulate web interface actions
+		resp, err := http.Get("http://localhost:8080/api/data")
+		if err != nil {
+			t.Fatalf("Failed to get web interface data: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("Expected status OK, got %v", resp.Status)
+		}
+	})
+
+	t.Run("RealIRCClients", func(t *testing.T) {
+		// This test requires real IRC clients and is not implemented here
+		t.Skip("Real IRC clients integration test is not implemented")
 	})
 }

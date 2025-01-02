@@ -1,0 +1,47 @@
+name: Integration Tests
+
+on:
+  push:
+    branches:
+      - "main"
+    paths-ignore:
+      - ".github/**"
+      - "**.md"
+      - ".gitignore"
+      - ".mise.toml"
+  pull_request:
+    branches:
+      - "**"
+
+jobs:
+  integration_tests:
+    name: Run Integration Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v3.5.3
+      - name: Set up Go
+        uses: actions/setup-go@v4.0.1
+        with:
+          go-version: "1.23.2"
+      - name: Cache Go modules
+        uses: actions/cache@v3.3.1
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-go-integration-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-integration-
+      - name: Verify dependencies
+        run: go mod verify
+      - name: Run go mod tidy
+        run: go mod tidy
+      - name: Install dependencies
+        run: go mod download
+      - name: Run integration tests
+        run: go test -v ./cmd/ircserver -run TestIntegration -coverprofile=integration-coverage.out -covermode=atomic
+      - name: Upload test results
+        uses: actions/upload-artifact@v3.1.2
+        with:
+          name: integration-test-results
+          path: integration-coverage.out
