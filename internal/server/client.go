@@ -3,30 +3,29 @@ package server
 import (
 	"bufio"
 	"fmt"
+	"ircserver/internal/config"
 	"log"
 	"net"
 	"strings"
 	"sync"
 	"time"
-
-	"ircserver/internal/config"
 )
 
-// Client represents a connected IRC client
+// Client represents a connected IRC client.
 type Client struct {
-	conn        net.Conn
-	nick        string
-	username    string
-	realname    string
-	channels    map[string]bool
-	writer      *bufio.Writer
-	mu          sync.Mutex
-	lastActive  time.Time
-	done        chan struct{}
-	config      *config.Config
+	conn       net.Conn
+	nick       string
+	username   string
+	realname   string
+	channels   map[string]bool
+	writer     *bufio.Writer
+	mu         sync.Mutex
+	lastActive time.Time
+	done       chan struct{}
+	config     *config.Config
 }
 
-// NewClient creates a new IRC client instance
+// NewClient creates a new IRC client instance.
 func NewClient(conn net.Conn, cfg *config.Config) *Client {
 	client := &Client{
 		conn:       conn,
@@ -36,7 +35,7 @@ func NewClient(conn net.Conn, cfg *config.Config) *Client {
 		done:       make(chan struct{}),
 		config:     cfg,
 	}
-	
+
 	// Start idle timeout monitor
 	go client.monitorIdle()
 	addr := conn.RemoteAddr()
@@ -48,11 +47,11 @@ func NewClient(conn net.Conn, cfg *config.Config) *Client {
 	return client
 }
 
-// Send sends a message to the client
+// Send sends a message to the client.
 func (c *Client) Send(message string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	
+
 	_, err := c.writer.WriteString(message + "\r\n")
 	if err != nil {
 		log.Printf("ERROR: Failed to send message to client %s: %v", c.String(), err)
@@ -84,40 +83,40 @@ func (c *Client) monitorIdle() {
 	}
 }
 
-// UpdateActivity updates the last active timestamp
+// UpdateActivity updates the last active timestamp.
 func (c *Client) UpdateActivity() {
 	c.mu.Lock()
 	c.lastActive = time.Now()
 	c.mu.Unlock()
 }
 
-// Close cleanly shuts down the client
+// Close cleanly shuts down the client.
 func (c *Client) Close() {
 	close(c.done)
 	c.conn.Close()
 }
 
-// handleConnection processes the client connection
+// handleConnection processes the client connection.
 func (c *Client) handleConnection() error {
 	reader := bufio.NewReader(c.conn)
-	
+
 	for {
 		line, err := reader.ReadString('\n')
 		if err != nil {
 			log.Printf("ERROR: Read error for client %s: %v", c.String(), err)
 			return err
 		}
-		
+
 		c.UpdateActivity()
 		line = strings.TrimSpace(line)
-		
+
 		if line == "" {
 			continue
 		}
-		
+
 		parts := strings.Fields(line)
 		cmd := parts[0]
-		
+
 		if cmd == "NICK" {
 			var nick string
 			if len(parts) < 2 {
@@ -125,7 +124,7 @@ func (c *Client) handleConnection() error {
 			} else {
 				nick = strings.TrimSpace(strings.Join(parts[1:], " "))
 			}
-			
+
 			if nick == "" {
 				if err := c.Send("431 * :No nickname given"); err != nil {
 					return err
@@ -148,7 +147,7 @@ func (c *Client) handleConnection() error {
 			}
 			continue
 		}
-		
+
 		if strings.HasPrefix(line, "USER ") {
 			parts := strings.Split(line, " ")
 			if len(parts) < 5 {
@@ -158,7 +157,7 @@ func (c *Client) handleConnection() error {
 			c.realname = strings.TrimPrefix(strings.Join(parts[4:], " "), ":")
 			return nil
 		}
-		
+
 		// Unknown command
 		log.Printf("WARN: Unknown command from %s: %s", c.String(), cmd)
 		if err := c.Send(fmt.Sprintf("421 %s %s :Unknown command", c.String(), cmd)); err != nil {
@@ -166,9 +165,7 @@ func (c *Client) handleConnection() error {
 		}
 	}
 }
-
-
-// String returns a string representation of the client
+// String returns a string representation of the client.
 func (c *Client) String() string {
 	if c.nick == "" {
 		return "unknown"

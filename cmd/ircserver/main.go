@@ -3,17 +3,16 @@ package main
 import (
 	"flag"
 	"fmt"
+	"ircserver/internal/config"
+	"ircserver/internal/persistence"
+	"ircserver/internal/server"
 	"log"
 	"os"
 	"os/signal"
 	"syscall"
-
-	"ircserver/internal/config"
-	"ircserver/internal/persistence"
-	"ircserver/internal/server"
 )
 
-// getEnv retrieves an environment variable value or returns a fallback value
+// getEnv retrieves an environment variable value or returns a fallback value.
 func getEnv(key, fallback string) string {
 	if value, ok := os.LookupEnv(key); ok {
 		return value
@@ -59,18 +58,18 @@ func main() {
 	}
 	defer store.Close()
 
-	log.Printf("INFO: Starting IRC server %s with host=%s port=%s", 
+	log.Printf("INFO: Starting IRC server %s with host=%s port=%s",
 		cfg.Server.Name, cfg.Server.Host, cfg.Server.Port)
-	
+
 	srv := server.New(cfg.Server.Host, cfg.Server.Port, store, cfg)
-	
+
 	// Start web interface
 	webServer, err := server.NewWebServer(srv)
 	if err != nil {
 		log.Fatalf("FATAL: Web server initialization error: %v", err)
 	}
 	srv.SetWebServer(webServer)
-	
+
 	// Handle graceful shutdown
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
@@ -83,7 +82,7 @@ func main() {
 			log.Printf("ERROR: Web server error: %v", err)
 		}
 	}()
-	
+
 	// Start IRC server in a goroutine
 	go func() {
 		if err := srv.Start(); err != nil {

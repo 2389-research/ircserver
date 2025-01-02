@@ -4,33 +4,30 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"ircserver/internal/config"
+	"ircserver/internal/persistence"
 	"log"
 	"net"
 	"strings"
 	"sync"
 	"time"
-
-	"ircserver/internal/config"
-	"ircserver/internal/persistence"
 )
-
-
-// Server represents an IRC server instance
+// Server represents an IRC server instance.
 type Server struct {
-	host       string
-	port       string
-	clients    map[string]*Client
-	channels   map[string]*Channel
-	store      persistence.Store
-	logger     *Logger
-	webServer  *WebServer
-	config     *config.Config
-	listener   net.Listener
-	shutdown   chan struct{}
-	mu         sync.RWMutex
+	host      string
+	port      string
+	clients   map[string]*Client
+	channels  map[string]*Channel
+	store     persistence.Store
+	logger    *Logger
+	webServer *WebServer
+	config    *config.Config
+	listener  net.Listener
+	shutdown  chan struct{}
+	mu        sync.RWMutex
 }
 
-// New creates a new IRC server instance
+// New creates a new IRC server instance.
 func New(host, port string, store persistence.Store, cfg *config.Config) *Server {
 	if cfg == nil {
 		cfg = config.DefaultConfig()
@@ -49,10 +46,10 @@ func New(host, port string, store persistence.Store, cfg *config.Config) *Server
 }
 
 // Start begins listening for connections
-// Shutdown gracefully shuts down the server
+// Shutdown gracefully shuts down the server.
 func (s *Server) Shutdown() error {
 	close(s.shutdown)
-	
+
 	// Close listener
 	if s.listener != nil {
 		if err := s.listener.Close(); err != nil {
@@ -122,7 +119,7 @@ func (s *Server) handleConnection(conn net.Conn) error {
 	s.clients[client.String()] = client
 	s.mu.Unlock()
 
-	s.logger.LogEvent(ctx, EventConnect, client, "SERVER", 
+	s.logger.LogEvent(ctx, EventConnect, client, "SERVER",
 		fmt.Sprintf("from %s", conn.RemoteAddr()))
 
 	defer func() {
@@ -133,7 +130,7 @@ func (s *Server) handleConnection(conn net.Conn) error {
 	for {
 		// Reset read deadline before each read
 		conn.SetReadDeadline(time.Now().Add(s.config.IRC.ReadTimeout))
-		
+
 		message, err := reader.ReadString('\n')
 		if err != nil {
 			if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
@@ -240,7 +237,7 @@ func (s *Server) handleUser(client *Client, args string) {
 
 	// Store user info in database
 	ctx := context.Background()
-	if err := s.store.UpdateUser(ctx, client.nick, client.username, client.realname, 
+	if err := s.store.UpdateUser(ctx, client.nick, client.username, client.realname,
 		client.conn.RemoteAddr().String()); err != nil {
 		log.Printf("ERROR: Failed to store user info: %v", err)
 	}
@@ -248,7 +245,7 @@ func (s *Server) handleUser(client *Client, args string) {
 	// Send welcome messages
 	welcomeMsg := fmt.Sprintf(":server 001 %s :Welcome to the IRC Network %s!%s@%s",
 		client.nick, client.nick, client.username, client.conn.RemoteAddr().String())
-	log.Printf("INFO: New client registered - Nick: %s, Username: %s, Address: %s", 
+	log.Printf("INFO: New client registered - Nick: %s, Username: %s, Address: %s",
 		client.nick, client.username, client.conn.RemoteAddr().String())
 	client.Send(welcomeMsg)
 }
@@ -282,19 +279,19 @@ func (s *Server) handleJoin(client *Client, args string) {
 		}
 		channel.AddClient(client)
 		client.channels[channelName] = true
-		
+
 		ctx := context.Background()
 		s.logger.LogEvent(ctx, EventJoin, client, channelName, "")
-		
+
 		if err := s.store.UpdateChannel(ctx, channelName, channel.GetTopic()); err != nil {
 			s.logger.LogError("Failed to store channel info", err)
 		}
-		
+
 		s.mu.Unlock()
 
 		// Send JOIN message to all clients in the channel
 		s.broadcastToChannel(channelName, fmt.Sprintf(":%s JOIN %s", client, channelName))
-		
+
 		// Send channel topic if it exists
 		if topic := channel.GetTopic(); topic != "" {
 			client.Send(fmt.Sprintf(":server 332 %s %s :%s", client.nick, channelName, topic))
@@ -324,13 +321,13 @@ func (s *Server) handlePart(client *Client, args string) {
 		if exists {
 			channel.RemoveClient(client.nick)
 			delete(client.channels, channelName)
-			
+
 			// Remove channel if empty
 			if len(channel.GetClients()) == 0 {
 				delete(s.channels, channelName)
 			}
 			s.mu.Unlock()
-			
+
 			s.broadcastToChannel(channelName, fmt.Sprintf(":%s PART %s", client, channelName))
 		} else {
 			s.mu.Unlock()
@@ -348,9 +345,9 @@ func (s *Server) handlePrivMsg(client *Client, args string) {
 
 	target := parts[0]
 	message := strings.TrimPrefix(parts[1], ":")
-	
+
 	s.logger.LogMessage(client, target, "PRIVMSG", message)
-	
+
 	s.deliverMessage(client, target, "PRIVMSG", message)
 }
 
@@ -362,9 +359,9 @@ func (s *Server) handleNotice(client *Client, args string) {
 
 	target := parts[0]
 	message := strings.TrimPrefix(parts[1], ":")
-	
+
 	s.logger.LogMessage(client, target, "NOTICE", message)
-	
+
 	s.deliverMessage(client, target, "NOTICE", message)
 }
 
@@ -403,10 +400,10 @@ func (s *Server) handleTopic(client *Client, args string) {
 	// Set new topic
 	newTopic := strings.TrimPrefix(parts[1], ":")
 	channel.SetTopic(newTopic)
-	
+
 	// Broadcast the topic change to all channel members
 	s.broadcastToChannel(channelName, fmt.Sprintf(":%s TOPIC %s :%s", client, channelName, newTopic))
-	
+
 	// Log the topic change
 	ctx := context.Background()
 	s.logger.LogEvent(ctx, EventTopic, client, channelName, newTopic)
@@ -482,7 +479,7 @@ func (s *Server) deliverMessage(from *Client, target, msgType, message string) {
 func (s *Server) broadcastToChannel(channelName string, message string) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	
+
 	channel, exists := s.channels[channelName]
 	if !exists {
 		return
@@ -501,14 +498,14 @@ func (s *Server) broadcastToChannel(channelName string, message string) {
 	}
 }
 
-// SetWebServer sets the web server reference
+// SetWebServer sets the web server reference.
 func (s *Server) SetWebServer(ws *WebServer) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.webServer = ws
 }
 
-// SetConfig sets the server configuration
+// SetConfig sets the server configuration.
 func (s *Server) SetConfig(cfg *config.Config) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-// Channel represents an IRC channel
+// Channel represents an IRC channel.
 type Channel struct {
 	Name    string
 	Topic   string
@@ -15,7 +15,7 @@ type Channel struct {
 	mu      sync.RWMutex
 }
 
-// NewChannel creates a new IRC channel
+// NewChannel creates a new IRC channel.
 func NewChannel(name string) *Channel {
 	ch := &Channel{
 		Name:    name,
@@ -26,7 +26,7 @@ func NewChannel(name string) *Channel {
 	return ch
 }
 
-// AddClient adds a client to the channel
+// AddClient adds a client to the channel.
 func (ch *Channel) AddClient(client *Client) {
 	ch.mu.Lock()
 	defer ch.mu.Unlock()
@@ -34,7 +34,7 @@ func (ch *Channel) AddClient(client *Client) {
 	log.Printf("INFO: Client %s joined channel %s", client.nick, ch.Name)
 }
 
-// RemoveClient removes a client from the channel
+// RemoveClient removes a client from the channel.
 func (ch *Channel) RemoveClient(nickname string) {
 	ch.mu.Lock()
 	defer ch.mu.Unlock()
@@ -42,21 +42,21 @@ func (ch *Channel) RemoveClient(nickname string) {
 	log.Printf("INFO: Client %s left channel %s", nickname, ch.Name)
 }
 
-// SetTopic sets the channel topic
+// SetTopic sets the channel topic.
 func (ch *Channel) SetTopic(topic string) {
 	ch.mu.Lock()
 	defer ch.mu.Unlock()
 	ch.Topic = topic
 }
 
-// GetTopic returns the channel topic
+// GetTopic returns the channel topic.
 func (ch *Channel) GetTopic() string {
 	ch.mu.RLock()
 	defer ch.mu.RUnlock()
 	return ch.Topic
 }
 
-// GetClients returns a list of all clients in the channel
+// GetClients returns a list of all clients in the channel.
 func (ch *Channel) GetClients() []*Client {
 	ch.mu.RLock()
 	// Create fixed-size slice upfront
@@ -74,7 +74,7 @@ func (ch *Channel) GetClients() []*Client {
 	return clients
 }
 
-// HasClient checks if a client is in the channel
+// HasClient checks if a client is in the channel.
 func (ch *Channel) HasClient(nickname string) bool {
 	ch.mu.RLock()
 	defer ch.mu.RUnlock()

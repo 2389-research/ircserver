@@ -22,25 +22,25 @@ type DashboardData struct {
 }
 
 type UserInfo struct {
-	Nickname  string   `json:"nickname"`
-	Username  string   `json:"username"`
-	Channels  []string `json:"channels"`
-	LastSeen  string   `json:"lastSeen"`
+	Nickname string   `json:"nickname"`
+	Username string   `json:"username"`
+	Channels []string `json:"channels"`
+	LastSeen string   `json:"lastSeen"`
 }
 
 type ChannelInfo struct {
-	Name     string   `json:"name"`
-	Topic    string   `json:"topic"`
-	UserCount int     `json:"userCount"`
-	Users    []string `json:"users"`
+	Name      string   `json:"name"`
+	Topic     string   `json:"topic"`
+	UserCount int      `json:"userCount"`
+	Users     []string `json:"users"`
 }
 
 type MessageInfo struct {
-	Time     string `json:"time"`
-	From     string `json:"from"`
-	To       string `json:"to"`
-	Type     string `json:"type"`
-	Content  string `json:"content"`
+	Time    string `json:"time"`
+	From    string `json:"from"`
+	To      string `json:"to"`
+	Type    string `json:"type"`
+	Content string `json:"content"`
 }
 
 func NewWebServer(ircServer *Server) (*WebServer, error) {
@@ -54,7 +54,7 @@ func NewWebServer(ircServer *Server) (*WebServer, error) {
 		templates: tmpl,
 		messages:  make([]MessageInfo, 0),
 	}
-	
+
 	ircServer.SetWebServer(ws)
 	return ws, nil
 }
@@ -62,12 +62,12 @@ func NewWebServer(ircServer *Server) (*WebServer, error) {
 func (ws *WebServer) Start(addr string) error {
 	// Serve static files
 	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("web/static"))))
-	
+
 	// Register routes
 	http.HandleFunc("/", ws.handleDashboard)
 	http.HandleFunc("/api/data", ws.handleAPIData)
 	http.HandleFunc("/api/send", ws.handleAPISend)
-	
+
 	return http.ListenAndServe(addr, nil)
 }
 
@@ -80,7 +80,7 @@ func (ws *WebServer) handleAPIData(w http.ResponseWriter, r *http.Request) {
 	defer ws.mu.RUnlock()
 
 	data := ws.collectDashboardData()
-	
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(data)
 }
@@ -122,18 +122,18 @@ func (ws *WebServer) handleAPISend(w http.ResponseWriter, r *http.Request) {
 
 	// Create a virtual admin client for web messages
 	adminClient := &Client{
-		nick: "WebAdmin",
+		nick:     "WebAdmin",
 		username: "webadmin",
 		realname: "Web Interface Administrator",
 	}
 
 	ws.ircServer.deliverMessage(adminClient, msg.Target, "PRIVMSG", msg.Content)
 	ws.AddMessage("WebAdmin", msg.Target, "PRIVMSG", msg.Content)
-	
+
 	w.WriteHeader(http.StatusOK)
 }
 
-// Shutdown gracefully shuts down the web server
+// Shutdown gracefully shuts down the web server.
 func (ws *WebServer) Shutdown() error {
 	// TODO: Implement proper shutdown with context and timeout
 	return nil
@@ -156,7 +156,7 @@ func (ws *WebServer) collectDashboardData() DashboardData {
 	ws.ircServer.mu.RLock()
 	clientsCopy := make(map[string]*Client, len(ws.ircServer.clients))
 	channelsCopy := make(map[string]*Channel, len(ws.ircServer.channels))
-	
+
 	for nick, client := range ws.ircServer.clients {
 		clientsCopy[nick] = client
 	}
@@ -172,7 +172,7 @@ func (ws *WebServer) collectDashboardData() DashboardData {
 		for ch := range client.channels {
 			channels = append(channels, ch)
 		}
-		
+
 		data.Users = append(data.Users, UserInfo{
 			Nickname: client.nick,
 			Username: client.username,
@@ -189,12 +189,12 @@ func (ws *WebServer) collectDashboardData() DashboardData {
 		for _, client := range channel.Clients {
 			users = append(users, client.nick)
 		}
-		
+
 		data.Channels = append(data.Channels, ChannelInfo{
-			Name:     name,
-			Topic:    channel.Topic,
+			Name:      name,
+			Topic:     channel.Topic,
 			UserCount: len(users),
-			Users:    users,
+			Users:     users,
 		})
 		channel.mu.RUnlock()
 	}

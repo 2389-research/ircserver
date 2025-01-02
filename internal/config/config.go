@@ -8,7 +8,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Config holds all configuration settings
+// Config holds all configuration settings.
 type Config struct {
 	Server struct {
 		Name    string `yaml:"name"`
@@ -30,7 +30,7 @@ type Config struct {
 	} `yaml:"irc"`
 }
 
-// DefaultConfig returns the default configuration
+// DefaultConfig returns the default configuration.
 func DefaultConfig() *Config {
 	cfg := &Config{}
 	cfg.Server.Name = "IRC Server"
@@ -48,7 +48,7 @@ func DefaultConfig() *Config {
 	return cfg
 }
 
-// Load reads the configuration file and returns a Config struct
+// Load reads the configuration file and returns a Config struct.
 func Load(path string) (*Config, error) {
 	cfg := DefaultConfig()
 
