@@ -97,6 +97,11 @@ func TestEnvOverrides(t *testing.T) {
 }
 
 func TestConfigReloading(t *testing.T) {
+	// Create testdata directory if it doesn't exist
+	if err := os.MkdirAll("testdata", 0755); err != nil {
+		t.Fatalf("Failed to create testdata directory: %v", err)
+	}
+	
 	cfg, err := Load("testdata/valid_config.yaml")
 	if err != nil {
 		t.Fatalf("Failed to load valid config: %v", err)
@@ -150,5 +155,10 @@ irc:
 	}
 	if cfg.IRC.MaxMessageLength != 1024 {
 		t.Errorf("Expected max message length 1024, got %d", cfg.IRC.MaxMessageLength)
+	}
+
+	// Cleanup
+	if err := os.Remove("testdata/valid_config.yaml"); err != nil {
+		t.Logf("Warning: Failed to cleanup test config file: %v", err)
 	}
 }

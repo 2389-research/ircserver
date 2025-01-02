@@ -33,7 +33,11 @@ type Config struct {
 // DefaultConfig returns the default configuration.
 func DefaultConfig() *Config {
 	cfg := &Config{}
-	cfg.Server.Name = "IRC Server"
+	if envName := os.Getenv("IRC_SERVER_NAME"); envName != "" {
+		cfg.Server.Name = envName
+	} else {
+		cfg.Server.Name = "IRC Server"
+	}
 	cfg.Server.Host = "localhost"
 	cfg.Server.Port = "6667"
 	cfg.Server.WebPort = "8080"
