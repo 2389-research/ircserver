@@ -116,9 +116,12 @@ func (c *Client) handleConnection() error {
 			continue
 		}
 		
-		if strings.HasPrefix(line, "NICK ") {
-			nick := strings.TrimPrefix(line, "NICK ")
-			nick = strings.TrimSpace(nick)
+		parts := strings.Fields(line)
+		cmd := parts[0]
+		
+		if cmd == "NICK" {
+			if len(parts) < 2 {
+				nick := ""
 			if nick == "" {
 				if err := c.Send("431 * :No nickname given"); err != nil {
 					return err
