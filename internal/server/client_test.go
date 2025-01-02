@@ -231,7 +231,6 @@ func TestPingTimeout(t *testing.T) {
 	client := NewClient(conn, cfg)
 
 	// Override ping interval for testing
-	originalPingInterval := 30 * time.Second
 	pingInterval := 100 * time.Millisecond
 	
 	// Start ping loop with shorter interval
