@@ -19,8 +19,8 @@ type testClient struct {
 
 func (t *testClient) Send(msg string) error {
 	t.messages = append(t.messages, msg)
-	// Don't call the underlying Client's Send
-	return nil
+	// Call the underlying Client's Send for proper logging
+	return t.Client.Send(msg)
 }
 
 // Ensure testClient satisfies the Client interface
@@ -220,11 +220,18 @@ func TestPrivMsgToChannel(t *testing.T) {
 	s.channels[channelName] = &Channel{
 		Name: channelName,
 		Clients: map[string]*Client{
-			sender.nick:     sender,
-			recipient1.nick: recipient1,
-			recipient2.nick: recipient2,
+			sender.nick:     sender.Client,
+			recipient1.nick: recipient1.Client,
+			recipient2.nick: recipient2.Client,
 		},
 		Created: time.Now(),
+	}
+
+	// Store testClient wrappers for message checking
+	testClients := map[string]*testClient{
+		sender.nick:     sender,
+		recipient1.nick: recipient1,
+		recipient2.nick: recipient2,
 	}
 	
 	// Test sending channel message
@@ -232,19 +239,16 @@ func TestPrivMsgToChannel(t *testing.T) {
 	
 	expected := ":alice PRIVMSG #test :Hello channel!"
 	
-	// Check that both recipients got the message
-	if len(recipient1.messages) != 1 {
-		t.Errorf("Expected 1 message for bob, got %d", len(recipient1.messages))
-	}
-	if recipient1.messages[0] != expected {
-		t.Errorf("Expected message '%s', got '%s'", expected, recipient1.messages[0])
-	}
-	
-	if len(recipient2.messages) != 1 {
-		t.Errorf("Expected 1 message for charlie, got %d", len(recipient2.messages))
-	}
-	if recipient2.messages[0] != expected {
-		t.Errorf("Expected message '%s', got '%s'", expected, recipient2.messages[0])
+	// Check that both recipients got the message using the testClient wrappers
+	for _, nick := range []string{"bob", "charlie"} {
+		testClient := testClients[nick]
+		if len(testClient.messages) != 1 {
+			t.Errorf("Expected 1 message for %s, got %d", nick, len(testClient.messages))
+			continue
+		}
+		if testClient.messages[0] != expected {
+			t.Errorf("Expected message '%s' for %s, got '%s'", expected, nick, testClient.messages[0])
+		}
 	}
 }
 
