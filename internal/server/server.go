@@ -291,13 +291,29 @@ func (s *Server) handleUser(client *Client, args string) {
 func (s *Server) handleQuit(client *Client, args string) {
 	quitMsg := "Quit"
 	if args != "" {
-		quitMsg = args
+		quitMsg = strings.TrimPrefix(args, ":")
 	}
 
-	s.removeClient(client)
+	// Log the QUIT event before removing the client
+	ctx := context.Background()
+	if err := s.logger.LogEvent(ctx, EventQuit, client, "SERVER", quitMsg); err != nil {
+		log.Printf("ERROR: Failed to log quit event: %v", err)
+	}
+
+	// Send quit message to all channels the client is in
+	quitNotice := fmt.Sprintf(":%s QUIT :%s", client, quitMsg)
+	for channelName := range client.channels {
+		if err := s.broadcastToChannel(channelName, quitNotice); err != nil {
+			log.Printf("ERROR: Failed to broadcast quit message to channel %s: %v", channelName, err)
+		}
+	}
+
+	// Send final message to the quitting client
 	if err := client.Send(fmt.Sprintf("ERROR :Closing Link: %s (%s)", client, quitMsg)); err != nil {
 		log.Printf("ERROR: Failed to send quit message: %v", err)
 	}
+
+	s.removeClient(client)
 	client.conn.Close()
 }
 

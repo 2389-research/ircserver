@@ -214,6 +214,82 @@ func TestConcurrentConnections(t *testing.T) {
 	}
 }
 
+func TestQuitCommand(t *testing.T) {
+	tests := []struct {
+		name           string
+		quitMsg        string
+		expectedNotice string
+	}{
+		{
+			name:           "quit with default message",
+			quitMsg:        "",
+			expectedNotice: "Quit",
+		},
+		{
+			name:           "quit with custom message",
+			quitMsg:        ":Goodbye everyone!",
+			expectedNotice: "Goodbye everyone!",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := config.DefaultConfig()
+			
+			// Create a server with a mock store
+			srv := New("localhost", "6667", &mockStore{}, cfg)
+			
+			// Create two test clients
+			conn1 := &mockConn{readData: strings.NewReader("")}
+			client1 := NewClient(conn1, cfg)
+			client1.nick = "user1"
+			
+			conn2 := &mockConn{readData: strings.NewReader("")}
+			client2 := NewClient(conn2, cfg)
+			client2.nick = "user2"
+			
+			// Add clients to same channel
+			channelName := "#test"
+			channel := NewChannel(channelName)
+			channel.AddClient(client1)
+			channel.AddClient(client2)
+			
+			srv.mu.Lock()
+			srv.channels[channelName] = channel
+			srv.clients[client1.nick] = client1
+			srv.clients[client2.nick] = client2
+			client1.channels[channelName] = true
+			client2.channels[channelName] = true
+			srv.mu.Unlock()
+			
+			// Send QUIT command
+			quitCmd := "QUIT"
+			if tt.quitMsg != "" {
+				quitCmd += " " + tt.quitMsg
+			}
+			
+			srv.handleMessage(context.Background(), client1, quitCmd)
+			
+			// Verify client2 received the quit notice
+			output := conn2.writeData.String()
+			expectedMsg := fmt.Sprintf(":user1 QUIT :%s", tt.expectedNotice)
+			if !strings.Contains(output, expectedMsg) {
+				t.Errorf("Expected quit notice %q not found in output: %q", expectedMsg, output)
+			}
+			
+			// Verify client was removed
+			srv.mu.RLock()
+			if _, exists := srv.clients[client1.nick]; exists {
+				t.Error("Client was not removed from server after QUIT")
+			}
+			if _, exists := srv.channels[channelName].Clients[client1.nick]; exists {
+				t.Error("Client was not removed from channel after QUIT")
+			}
+			srv.mu.RUnlock()
+		})
+	}
+}
+
 func TestUnknownCommand(t *testing.T) {
 	cfg := config.DefaultConfig()
 	conn := &mockConn{
