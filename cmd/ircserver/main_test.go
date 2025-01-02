@@ -42,29 +42,3 @@ func TestGetEnv(t *testing.T) {
 		})
 	}
 }
-
-func TestMessageHandling(t *testing.T) {
-	t.Run("PRIVMSG to users", func(t *testing.T) {
-		// Add test logic for PRIVMSG to users
-	})
-
-	t.Run("PRIVMSG to channels", func(t *testing.T) {
-		// Add test logic for PRIVMSG to channels
-	})
-
-	t.Run("NOTICE handling", func(t *testing.T) {
-		// Add test logic for NOTICE handling
-	})
-
-	t.Run("Message size limits", func(t *testing.T) {
-		// Add test logic for message size limits
-	})
-
-	t.Run("Invalid message formats", func(t *testing.T) {
-		// Add test logic for invalid message formats
-	})
-
-	t.Run("Message broadcasting performance", func(t *testing.T) {
-		// Add test logic for message broadcasting performance
-	})
-}
