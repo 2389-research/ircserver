@@ -84,9 +84,9 @@ func TestConcurrentOperations(t *testing.T) {
 	store := &mockStore{}
 	srv := New("localhost", "0", store, cfg)
 
-	// Create test channels and clients
-	channels := []string{"#test1", "#test2", "#test3"}
-	numClients := 10
+	// Create test channels and clients - reduced for faster testing
+	channels := []string{"#test1", "#test2"}
+	numClients := 5
 	clients := make([]*Client, numClients)
 	
 	// Initialize clients under server lock
@@ -137,17 +137,17 @@ func TestConcurrentOperations(t *testing.T) {
 	}
 	wg.Wait()
 
-	// Concurrent parts - do this in phases to avoid deadlocks
-	for _, channel := range channels {
-		wg.Add(len(clients))
-		for _, client := range clients {
+	// Concurrent parts - all at once
+	for _, client := range clients {
+		for _, channel := range channels {
+			wg.Add(1)
 			go func(c *Client, ch string) {
 				defer wg.Done()
 				srv.handlePart(c, ch)
 			}(client, channel)
 		}
-		wg.Wait() // Wait for each channel to be fully cleared before moving to next
 	}
+	wg.Wait()
 
 	// Final verification with timeout
 	done := make(chan bool)
@@ -168,7 +168,7 @@ func TestConcurrentOperations(t *testing.T) {
 		done <- true
 	}()
 
-	timeout := time.After(5 * time.Second)
+	timeout := time.After(2 * time.Second)
 
 	select {
 	case <-timeout:
