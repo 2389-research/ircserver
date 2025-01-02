@@ -62,8 +62,7 @@ func main() {
 	log.Printf("INFO: Starting IRC server %s with host=%s port=%s", 
 		cfg.Server.Name, cfg.Server.Host, cfg.Server.Port)
 	
-	srv := server.New(cfg.Server.Host, cfg.Server.Port, store)
-	srv.SetConfig(cfg)
+	srv := server.New(cfg.Server.Host, cfg.Server.Port, store, cfg)
 	
 	// Start web interface
 	webServer, err := server.NewWebServer(srv)

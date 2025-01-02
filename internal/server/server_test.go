@@ -22,7 +22,7 @@ func (m *mockStore) UpdateChannel(ctx context.Context, name, topic string) error
 
 func TestChannelOperations(t *testing.T) {
 	store := &mockStore{}
-	srv := New("localhost", "0", store)
+	srv := New("localhost", "0", store, cfg)
 	
 	cfg := config.DefaultConfig()
 	
@@ -65,7 +65,7 @@ func TestChannelOperations(t *testing.T) {
 
 func TestServerAcceptsConnections(t *testing.T) {
 	store := &mockStore{}
-	srv := New("localhost", "6668", store)
+	srv := New("localhost", "6668", store, cfg)
 
 	// Start server in a goroutine
 	go func() {
