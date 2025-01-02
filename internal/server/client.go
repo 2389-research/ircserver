@@ -25,7 +25,12 @@ func NewClient(conn net.Conn) *Client {
 		channels: make(map[string]bool),
 		writer:   bufio.NewWriter(conn),
 	}
-	log.Printf("INFO: New client connection from %s", conn.RemoteAddr().String())
+	addr := conn.RemoteAddr()
+	addrStr := "unknown"
+	if addr != nil {
+		addrStr = addr.String()
+	}
+	log.Printf("INFO: New client connection from %s", addrStr)
 	return client
 }
 

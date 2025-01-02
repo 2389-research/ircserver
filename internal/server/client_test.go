@@ -17,7 +17,12 @@ func (m *mockConn) Read(b []byte) (n int, err error)   { return m.readData.Read(
 func (m *mockConn) Write(b []byte) (n int, err error)  { return m.writeData.Write(b) }
 func (m *mockConn) Close() error                       { return nil }
 func (m *mockConn) LocalAddr() net.Addr                { return nil }
-func (m *mockConn) RemoteAddr() net.Addr               { return nil }
+type mockAddr struct{}
+
+func (a *mockAddr) Network() string { return "tcp" }
+func (a *mockAddr) String() string  { return "test:1234" }
+
+func (m *mockConn) RemoteAddr() net.Addr               { return &mockAddr{} }
 func (m *mockConn) SetDeadline(t time.Time) error      { return nil }
 func (m *mockConn) SetReadDeadline(t time.Time) error  { return nil }
 func (m *mockConn) SetWriteDeadline(t time.Time) error { return nil }
