@@ -564,7 +564,7 @@ func (s *Server) broadcastToChannel(channelName string, message string) error {
 
 	channel, exists := s.channels[channelName]
 	if !exists {
-		return
+		return fmt.Errorf("channel %s does not exist", channelName)
 	}
 
 	channel.mu.RLock()
