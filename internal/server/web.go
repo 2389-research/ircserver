@@ -3,6 +3,7 @@ package server
 import (
 	"encoding/json"
 	"html/template"
+	"log"
 	"net/http"
 	"sync"
 	"time"
