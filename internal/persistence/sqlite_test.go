@@ -13,18 +13,11 @@ import (
 
 func setupTestDB(t *testing.T) *SQLiteStore {
 	t.Helper()
-	store := &SQLiteStore{}
-	db, err := sql.Open("sqlite3", ":memory:")
+	db, err := New(":memory:")
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
-	store.db = db
-	
-	if err := createTables(db); err != nil {
-		db.Close()
-		t.Fatalf("Failed to create tables: %v", err)
-	}
-	return store
+	return db
 }
 
 func TestUserPersistence(t *testing.T) {
