@@ -3,21 +3,24 @@ package server
 import (
 	"context"
 	"fmt"
-	"ircserver/internal/config"
-	"ircserver/internal/persistence"
 	"strings"
 	"testing"
+
+	"ircserver/internal/config"
+	"ircserver/internal/persistence"
 )
 
-// mockStore implements persistence.Store interface for testing
+// mockStore implements persistence.Store interface for testing.
 type mockStore struct{}
 
 var _ persistence.Store = (*mockStore)(nil) // Compile-time interface check
 
 func (m *mockStore) Close() error { return nil }
+
 func (m *mockStore) LogMessage(ctx context.Context, sender, recipient, msgType, content string) error {
 	return nil
 }
+
 func (m *mockStore) UpdateUser(ctx context.Context, nickname, username, realname, ipAddr string) error {
 	return nil
 }
@@ -45,12 +48,12 @@ func TestChannelOperations(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Reset server state
 			srv = New("localhost", "0", store, cfg)
-			
+
 			client := NewClient(&mockConn{readData: strings.NewReader("")}, cfg)
 			client.nick = "user1"
-			
+
 			srv.handleJoin(client, tt.channel)
-			
+
 			if tt.want {
 				if len(srv.channels) != 1 {
 					t.Errorf("Expected 1 channel, got %d", len(srv.channels))

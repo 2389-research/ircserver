@@ -10,15 +10,15 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
-// Ensure SQLiteStore implements Store interface
+// Ensure SQLiteStore implements Store interface.
 var _ Store = (*SQLiteStore)(nil)
 
-// SQLiteStore handles all database operations
+// SQLiteStore handles all database operations.
 type SQLiteStore struct {
 	db *sql.DB
 }
 
-// New creates a new database connection and initializes tables
+// New creates a new database connection and initializes tables.
 func New(dbPath string) (*SQLiteStore, error) {
 	db, err := sql.Open("sqlite3", dbPath)
 	if err != nil {
@@ -33,7 +33,7 @@ func New(dbPath string) (*SQLiteStore, error) {
 	return &SQLiteStore{db: db}, nil
 }
 
-// Close closes the database connection
+// Close closes the database connection.
 func (s *SQLiteStore) Close() error {
 	return s.db.Close()
 }
@@ -72,11 +72,11 @@ func createTables(db *sql.DB) error {
 	return nil
 }
 
-// LogMessage stores a message in the database
+// LogMessage stores a message in the database.
 func (s *SQLiteStore) LogMessage(ctx context.Context, sender, recipient, msgType, content string) error {
 	query := `INSERT INTO message_logs (timestamp, sender, recipient, message_type, content)
 			 VALUES (?, ?, ?, ?, ?)`
-	
+
 	_, err := s.db.ExecContext(ctx, query, time.Now(), sender, recipient, msgType, content)
 	if err != nil {
 		return fmt.Errorf("failed to log message: %w", err)
@@ -84,11 +84,11 @@ func (s *SQLiteStore) LogMessage(ctx context.Context, sender, recipient, msgType
 	return nil
 }
 
-// UpdateUser stores or updates user information
+// UpdateUser stores or updates user information.
 func (s *SQLiteStore) UpdateUser(ctx context.Context, nickname, username, realname, ipAddr string) error {
 	query := `INSERT OR REPLACE INTO users (nickname, username, realname, ip_address, last_seen)
 			 VALUES (?, ?, ?, ?, ?)`
-	
+
 	_, err := s.db.ExecContext(ctx, query, nickname, username, realname, ipAddr, time.Now())
 	if err != nil {
 		log.Printf("ERROR: Failed to update user: %v", err)
@@ -96,11 +96,11 @@ func (s *SQLiteStore) UpdateUser(ctx context.Context, nickname, username, realna
 	return err
 }
 
-// UpdateChannel stores or updates channel information
+// UpdateChannel stores or updates channel information.
 func (s *SQLiteStore) UpdateChannel(ctx context.Context, name, topic string) error {
 	query := `INSERT OR REPLACE INTO channels (name, topic, created_at)
 			 VALUES (?, ?, ?)`
-	
+
 	_, err := s.db.ExecContext(ctx, query, name, topic, time.Now())
 	if err != nil {
 		log.Printf("ERROR: Failed to update channel: %v", err)

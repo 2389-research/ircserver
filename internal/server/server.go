@@ -4,33 +4,30 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"ircserver/internal/config"
+	"ircserver/internal/persistence"
 	"log"
 	"net"
 	"strings"
 	"sync"
 	"time"
-
-	"ircserver/internal/config"
-	"ircserver/internal/persistence"
 )
-
-
-// Server represents an IRC server instance
+// Server represents an IRC server instance.
 type Server struct {
-	host       string
-	port       string
-	clients    map[string]*Client
-	channels   map[string]*Channel
-	store      persistence.Store
-	logger     *Logger
-	webServer  *WebServer
-	config     *config.Config
-	listener   net.Listener
-	shutdown   chan struct{}
-	mu         sync.RWMutex
+	host      string
+	port      string
+	clients   map[string]*Client
+	channels  map[string]*Channel
+	store     persistence.Store
+	logger    *Logger
+	webServer *WebServer
+	config    *config.Config
+	listener  net.Listener
+	shutdown  chan struct{}
+	mu        sync.RWMutex
 }
 
-// New creates a new IRC server instance
+// New creates a new IRC server instance.
 func New(host, port string, store persistence.Store, cfg *config.Config) *Server {
 	if cfg == nil {
 		cfg = config.DefaultConfig()
@@ -49,10 +46,10 @@ func New(host, port string, store persistence.Store, cfg *config.Config) *Server
 }
 
 // Start begins listening for connections
-// Shutdown gracefully shuts down the server
+// Shutdown gracefully shuts down the server.
 func (s *Server) Shutdown() error {
 	close(s.shutdown)
-	
+
 	// Close listener
 	if s.listener != nil {
 		if err := s.listener.Close(); err != nil {
@@ -63,7 +60,9 @@ func (s *Server) Shutdown() error {
 	// Notify all clients
 	s.mu.RLock()
 	for _, client := range s.clients {
-		client.Send("ERROR :Server shutting down")
+		if err := client.Send("ERROR :Server shutting down"); err != nil {
+			log.Printf("ERROR: Failed to send shutdown message to client: %v", err)
+		}
 		client.conn.Close()
 	}
 	s.mu.RUnlock()
@@ -100,7 +99,11 @@ func (s *Server) Start() error {
 				continue
 			}
 
-			go s.handleConnection(conn)
+			go func(conn net.Conn) {
+				if err := s.handleConnection(conn); err != nil {
+					log.Printf("ERROR: Connection handler error: %v", err)
+				}
+			}(conn)
 		}
 	}
 }
@@ -110,8 +113,12 @@ func (s *Server) handleConnection(conn net.Conn) error {
 	defer cancel()
 
 	// Set initial connection timeouts
-	conn.SetReadDeadline(time.Now().Add(s.config.IRC.ReadTimeout))
-	conn.SetWriteDeadline(time.Now().Add(s.config.IRC.WriteTimeout))
+	if err := conn.SetReadDeadline(time.Now().Add(s.config.IRC.ReadTimeout)); err != nil {
+		return fmt.Errorf("failed to set read deadline: %w", err)
+	}
+	if err := conn.SetWriteDeadline(time.Now().Add(s.config.IRC.WriteTimeout)); err != nil {
+		return fmt.Errorf("failed to set write deadline: %w", err)
+	}
 
 	client := NewClient(conn, s.config)
 	defer client.Close()
@@ -122,8 +129,10 @@ func (s *Server) handleConnection(conn net.Conn) error {
 	s.clients[client.String()] = client
 	s.mu.Unlock()
 
-	s.logger.LogEvent(ctx, EventConnect, client, "SERVER", 
-		fmt.Sprintf("from %s", conn.RemoteAddr()))
+	if err := s.logger.LogEvent(ctx, EventConnect, client, "SERVER",
+		fmt.Sprintf("from %s", conn.RemoteAddr())); err != nil {
+		log.Printf("ERROR: Failed to log connect event: %v", err)
+	}
 
 	defer func() {
 		s.removeClient(client)
@@ -132,8 +141,11 @@ func (s *Server) handleConnection(conn net.Conn) error {
 
 	for {
 		// Reset read deadline before each read
-		conn.SetReadDeadline(time.Now().Add(s.config.IRC.ReadTimeout))
-		
+		if err := conn.SetReadDeadline(time.Now().Add(s.config.IRC.ReadTimeout)); err != nil {
+			log.Printf("ERROR: Failed to set read deadline: %v", err)
+			return fmt.Errorf("failed to set read deadline: %w", err)
+		}
+
 		message, err := reader.ReadString('\n')
 		if err != nil {
 			if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
@@ -147,7 +159,9 @@ func (s *Server) handleConnection(conn net.Conn) error {
 		// Enforce message size limit
 		if len(message) > s.config.IRC.MaxBufferSize {
 			log.Printf("WARN: Oversized message from client %s: %d bytes", client, len(message))
-			client.Send(":server ERROR :Message too long")
+			if err := client.Send(":server ERROR :Message too long"); err != nil {
+				log.Printf("ERROR: Failed to send message size error: %v", err)
+			}
 			continue
 		}
 
@@ -175,7 +189,9 @@ func (s *Server) handleMessage(ctx context.Context, client *Client, message stri
 
 	switch command {
 	case "NICK":
-		s.handleNick(client, args)
+		if err := s.handleNick(client, args); err != nil {
+			log.Printf("ERROR: Failed to handle NICK command: %v", err)
+		}
 	case "USER":
 		s.handleUser(client, args)
 	case "QUIT":
@@ -204,7 +220,9 @@ func (s *Server) handleNick(client *Client, args string) error {
 	newNick := strings.TrimSpace(args)
 	if newNick == "" {
 		err := NewError(ErrNoNicknameGiven, "No nickname given", nil)
-		client.Send(fmt.Sprintf(":server %s", err.Error()))
+		if err := client.Send(fmt.Sprintf(":server %s", err.Error())); err != nil {
+			log.Printf("ERROR: Failed to send error message: %v", err)
+		}
 		return err
 	}
 
@@ -213,7 +231,9 @@ func (s *Server) handleNick(client *Client, args string) error {
 
 	// Check if nickname is already in use
 	if _, exists := s.clients[newNick]; exists {
-		client.Send(":server 433 * " + newNick + " :Nickname is already in use")
+		if err := client.Send(":server 433 * " + newNick + " :Nickname is already in use"); err != nil {
+			log.Printf("ERROR: Failed to send nickname in use error: %v", err)
+		}
 		return fmt.Errorf("nickname %s already in use", newNick)
 	}
 
@@ -224,14 +244,18 @@ func (s *Server) handleNick(client *Client, args string) error {
 
 	client.nick = newNick
 	s.clients[newNick] = client
-	client.Send(fmt.Sprintf(":%s NICK %s", client, newNick))
+	if err := client.Send(fmt.Sprintf(":%s NICK %s", client, newNick)); err != nil {
+		log.Printf("ERROR: Failed to send nick change confirmation: %v", err)
+	}
 	return nil
 }
 
 func (s *Server) handleUser(client *Client, args string) {
 	parts := strings.SplitN(args, " ", 4)
 	if len(parts) < 4 {
-		client.Send(":server 461 USER :Not enough parameters")
+		if err := client.Send(":server 461 USER :Not enough parameters"); err != nil {
+			log.Printf("ERROR: Failed to send parameters error: %v", err)
+		}
 		return
 	}
 
@@ -240,7 +264,7 @@ func (s *Server) handleUser(client *Client, args string) {
 
 	// Store user info in database
 	ctx := context.Background()
-	if err := s.store.UpdateUser(ctx, client.nick, client.username, client.realname, 
+	if err := s.store.UpdateUser(ctx, client.nick, client.username, client.realname,
 		client.conn.RemoteAddr().String()); err != nil {
 		log.Printf("ERROR: Failed to store user info: %v", err)
 	}
@@ -248,9 +272,11 @@ func (s *Server) handleUser(client *Client, args string) {
 	// Send welcome messages
 	welcomeMsg := fmt.Sprintf(":server 001 %s :Welcome to the IRC Network %s!%s@%s",
 		client.nick, client.nick, client.username, client.conn.RemoteAddr().String())
-	log.Printf("INFO: New client registered - Nick: %s, Username: %s, Address: %s", 
+	log.Printf("INFO: New client registered - Nick: %s, Username: %s, Address: %s",
 		client.nick, client.username, client.conn.RemoteAddr().String())
-	client.Send(welcomeMsg)
+	if err := client.Send(welcomeMsg); err != nil {
+		log.Printf("ERROR: Failed to send welcome message: %v", err)
+	}
 }
 
 func (s *Server) handleQuit(client *Client, args string) {
@@ -260,7 +286,9 @@ func (s *Server) handleQuit(client *Client, args string) {
 	}
 
 	s.removeClient(client)
-	client.Send(fmt.Sprintf("ERROR :Closing Link: %s (%s)", client, quitMsg))
+	if err := client.Send(fmt.Sprintf("ERROR :Closing Link: %s (%s)", client, quitMsg)); err != nil {
+		log.Printf("ERROR: Failed to send quit message: %v", err)
+	}
 	client.conn.Close()
 }
 
@@ -270,7 +298,9 @@ func (s *Server) handleJoin(client *Client, args string) {
 		channelName = strings.TrimSpace(channelName)
 		// Validate channel name
 		if !isValidChannelName(channelName) {
-			client.Send(fmt.Sprintf(":server 403 %s %s :Invalid channel name", client.nick, channelName))
+			if err := client.Send(fmt.Sprintf(":server 403 %s %s :Invalid channel name", client.nick, channelName)); err != nil {
+				log.Printf("ERROR: Failed to send invalid channel name error: %v", err)
+			}
 			continue
 		}
 
@@ -282,22 +312,29 @@ func (s *Server) handleJoin(client *Client, args string) {
 		}
 		channel.AddClient(client)
 		client.channels[channelName] = true
-		
+
 		ctx := context.Background()
-		s.logger.LogEvent(ctx, EventJoin, client, channelName, "")
-		
+		if err := s.logger.LogEvent(ctx, EventJoin, client, channelName, ""); err != nil {
+			log.Printf("ERROR: Failed to log join event: %v", err)
+		}
+
 		if err := s.store.UpdateChannel(ctx, channelName, channel.GetTopic()); err != nil {
 			s.logger.LogError("Failed to store channel info", err)
 		}
-		
+
 		s.mu.Unlock()
 
 		// Send JOIN message to all clients in the channel
-		s.broadcastToChannel(channelName, fmt.Sprintf(":%s JOIN %s", client, channelName))
-		
+		joinMsg := fmt.Sprintf(":%s JOIN %s", client, channelName)
+		if err := s.broadcastToChannel(channelName, joinMsg); err != nil {
+			log.Printf("ERROR: Failed to broadcast join message: %v", err)
+		}
+
 		// Send channel topic if it exists
 		if topic := channel.GetTopic(); topic != "" {
-			client.Send(fmt.Sprintf(":server 332 %s %s :%s", client.nick, channelName, topic))
+			if err := client.Send(fmt.Sprintf(":server 332 %s %s :%s", client.nick, channelName, topic)); err != nil {
+				log.Printf("ERROR: Failed to send channel topic: %v", err)
+			}
 		}
 
 		// Send list of users in channel
@@ -305,14 +342,20 @@ func (s *Server) handleJoin(client *Client, args string) {
 		for _, c := range channel.GetClients() {
 			names = append(names, c.nick)
 		}
-		client.Send(fmt.Sprintf(":server 353 %s = %s :%s", client.nick, channelName, strings.Join(names, " ")))
-		client.Send(fmt.Sprintf(":server 366 %s %s :End of /NAMES list", client.nick, channelName))
+		if err := client.Send(fmt.Sprintf(":server 353 %s = %s :%s", client.nick, channelName, strings.Join(names, " "))); err != nil {
+			log.Printf("ERROR: Failed to send channel names list: %v", err)
+		}
+		if err := client.Send(fmt.Sprintf(":server 366 %s %s :End of /NAMES list", client.nick, channelName)); err != nil {
+			log.Printf("ERROR: Failed to send end of names list: %v", err)
+		}
 	}
 }
 
 func (s *Server) handlePart(client *Client, args string) {
 	if args == "" {
-		client.Send(":server 461 PART :Not enough parameters")
+		if err := client.Send(":server 461 PART :Not enough parameters"); err != nil {
+			log.Printf("ERROR: Failed to send parameters error: %v", err)
+		}
 		return
 	}
 
@@ -324,17 +367,22 @@ func (s *Server) handlePart(client *Client, args string) {
 		if exists {
 			channel.RemoveClient(client.nick)
 			delete(client.channels, channelName)
-			
+
 			// Remove channel if empty
 			if len(channel.GetClients()) == 0 {
 				delete(s.channels, channelName)
 			}
 			s.mu.Unlock()
-			
-			s.broadcastToChannel(channelName, fmt.Sprintf(":%s PART %s", client, channelName))
+
+			partMsg := fmt.Sprintf(":%s PART %s", client, channelName)
+			if err := s.broadcastToChannel(channelName, partMsg); err != nil {
+				log.Printf("ERROR: Failed to broadcast part message: %v", err)
+			}
 		} else {
 			s.mu.Unlock()
-			client.Send(fmt.Sprintf(":server 403 %s %s :No such channel", client.nick, channelName))
+			if err := client.Send(fmt.Sprintf(":server 403 %s %s :No such channel", client.nick, channelName)); err != nil {
+				log.Printf("ERROR: Failed to send no such channel error: %v", err)
+			}
 		}
 	}
 }
@@ -342,15 +390,17 @@ func (s *Server) handlePart(client *Client, args string) {
 func (s *Server) handlePrivMsg(client *Client, args string) {
 	parts := strings.SplitN(args, " ", 2)
 	if len(parts) < 2 {
-		client.Send(":server 461 PRIVMSG :Not enough parameters")
+		if err := client.Send(":server 461 PRIVMSG :Not enough parameters"); err != nil {
+			log.Printf("ERROR: Failed to send parameters error: %v", err)
+		}
 		return
 	}
 
 	target := parts[0]
 	message := strings.TrimPrefix(parts[1], ":")
-	
+
 	s.logger.LogMessage(client, target, "PRIVMSG", message)
-	
+
 	s.deliverMessage(client, target, "PRIVMSG", message)
 }
 
@@ -362,20 +412,24 @@ func (s *Server) handleNotice(client *Client, args string) {
 
 	target := parts[0]
 	message := strings.TrimPrefix(parts[1], ":")
-	
+
 	s.logger.LogMessage(client, target, "NOTICE", message)
-	
+
 	s.deliverMessage(client, target, "NOTICE", message)
 }
 
 func (s *Server) handlePing(client *Client, args string) {
-	client.Send(fmt.Sprintf("PONG :%s", args))
+	if err := client.Send(fmt.Sprintf("PONG :%s", args)); err != nil {
+		log.Printf("ERROR: Failed to send PONG response: %v", err)
+	}
 }
 
 func (s *Server) handleTopic(client *Client, args string) {
 	parts := strings.SplitN(args, " ", 2)
 	if len(parts) < 1 {
-		client.Send(":server 461 TOPIC :Not enough parameters")
+		if err := client.Send(":server 461 TOPIC :Not enough parameters"); err != nil {
+			log.Printf("ERROR: Failed to send parameters error: %v", err)
+		}
 		return
 	}
 
@@ -385,7 +439,9 @@ func (s *Server) handleTopic(client *Client, args string) {
 	s.mu.RUnlock()
 
 	if !exists {
-		client.Send(fmt.Sprintf(":server 403 %s %s :No such channel", client.nick, channelName))
+		if err := client.Send(fmt.Sprintf(":server 403 %s %s :No such channel", client.nick, channelName)); err != nil {
+			log.Printf("ERROR: Failed to send no such channel error: %v", err)
+		}
 		return
 	}
 
@@ -393,9 +449,13 @@ func (s *Server) handleTopic(client *Client, args string) {
 	if len(parts) == 1 {
 		topic := channel.GetTopic()
 		if topic == "" {
-			client.Send(fmt.Sprintf(":server 331 %s %s :No topic is set", client.nick, channelName))
+			if err := client.Send(fmt.Sprintf(":server 331 %s %s :No topic is set", client.nick, channelName)); err != nil {
+				log.Printf("ERROR: Failed to send no topic message: %v", err)
+			}
 		} else {
-			client.Send(fmt.Sprintf(":server 332 %s %s :%s", client.nick, channelName, topic))
+			if err := client.Send(fmt.Sprintf(":server 332 %s %s :%s", client.nick, channelName, topic)); err != nil {
+				log.Printf("ERROR: Failed to send topic message: %v", err) 
+			}
 		}
 		return
 	}
@@ -403,19 +463,26 @@ func (s *Server) handleTopic(client *Client, args string) {
 	// Set new topic
 	newTopic := strings.TrimPrefix(parts[1], ":")
 	channel.SetTopic(newTopic)
-	
+
 	// Broadcast the topic change to all channel members
-	s.broadcastToChannel(channelName, fmt.Sprintf(":%s TOPIC %s :%s", client, channelName, newTopic))
-	
+	topicMsg := fmt.Sprintf(":%s TOPIC %s :%s", client, channelName, newTopic)
+	if err := s.broadcastToChannel(channelName, topicMsg); err != nil {
+		log.Printf("ERROR: Failed to broadcast topic change: %v", err)
+	}
+
 	// Log the topic change
 	ctx := context.Background()
-	s.logger.LogEvent(ctx, EventTopic, client, channelName, newTopic)
+	if err := s.logger.LogEvent(ctx, EventTopic, client, channelName, newTopic); err != nil {
+		log.Printf("ERROR: Failed to log topic event: %v", err)
+	}
 }
 
 func (s *Server) handleWho(client *Client, args string) {
 	target := strings.TrimSpace(args)
 	if target == "" {
-		client.Send(":server 461 WHO :Not enough parameters")
+		if err := client.Send(":server 461 WHO :Not enough parameters"); err != nil {
+			log.Printf("ERROR: Failed to send parameters error: %v", err)
+		}
 		return
 	}
 
@@ -426,28 +493,36 @@ func (s *Server) handleWho(client *Client, args string) {
 		// WHO for channel
 		channel, exists := s.channels[target]
 		if !exists {
-			client.Send(fmt.Sprintf(":server 403 %s %s :No such channel", client.nick, target))
+			if err := client.Send(fmt.Sprintf(":server 403 %s %s :No such channel", client.nick, target)); err != nil {
+				log.Printf("ERROR: Failed to send no channel error: %v", err)
+			}
 			return
 		}
 
 		for _, member := range channel.GetClients() {
 			// <channel> <username> <host> <server> <nick> <H|G>[*][@|+] :<hopcount> <real name>
-			client.Send(fmt.Sprintf(":server 352 %s %s %s %s server %s H :0 %s",
+			if err := client.Send(fmt.Sprintf(":server 352 %s %s %s %s server %s H :0 %s",
 				client.nick, target, member.username,
 				member.conn.RemoteAddr().String(),
-				member.nick, member.realname))
+				member.nick, member.realname)); err != nil {
+				log.Printf("ERROR: Failed to send WHO response: %v", err)
+			}
 		}
 	} else {
 		// WHO for user
 		if targetClient, exists := s.clients[target]; exists {
-			client.Send(fmt.Sprintf(":server 352 %s * %s %s server %s H :0 %s",
+			if err := client.Send(fmt.Sprintf(":server 352 %s * %s %s server %s H :0 %s",
 				client.nick, targetClient.username,
 				targetClient.conn.RemoteAddr().String(),
-				targetClient.nick, targetClient.realname))
+				targetClient.nick, targetClient.realname)); err != nil {
+				log.Printf("ERROR: Failed to send WHO response: %v", err) 
+			}
 		}
 	}
 
-	client.Send(fmt.Sprintf(":server 315 %s %s :End of WHO list", client.nick, target))
+	if err := client.Send(fmt.Sprintf(":server 315 %s %s :End of WHO list", client.nick, target)); err != nil {
+		log.Printf("ERROR: Failed to send end of WHO list: %v", err)
+	}
 }
 
 func (s *Server) deliverMessage(from *Client, target, msgType, message string) {
@@ -462,30 +537,38 @@ func (s *Server) deliverMessage(from *Client, target, msgType, message string) {
 		s.mu.RLock()
 		if _, exists := s.channels[target]; exists {
 			s.mu.RUnlock()
-			s.broadcastToChannel(target, fmt.Sprintf(":%s %s %s :%s", from, msgType, target, message))
+			if err := s.broadcastToChannel(target, fmt.Sprintf(":%s %s %s :%s", from, msgType, target, message)); err != nil {
+				log.Printf("ERROR: Failed to broadcast channel message: %v", err)
+			}
 		} else {
 			s.mu.RUnlock()
-			from.Send(fmt.Sprintf(":server 403 %s %s :No such channel", from.nick, target))
+			if err := from.Send(fmt.Sprintf(":server 403 %s %s :No such channel", from.nick, target)); err != nil {
+				log.Printf("ERROR: Failed to send no such channel error: %v", err)
+			}
 		}
 	} else {
 		s.mu.RLock()
 		if to, exists := s.clients[target]; exists {
 			s.mu.RUnlock()
-			to.Send(fmt.Sprintf(":%s %s %s :%s", from, msgType, target, message))
+			if err := to.Send(fmt.Sprintf(":%s %s %s :%s", from, msgType, target, message)); err != nil {
+				log.Printf("ERROR: Failed to deliver message to %s: %v", target, err)
+			}
 		} else {
 			s.mu.RUnlock()
-			from.Send(fmt.Sprintf(":server 401 %s %s :No such nick/channel", from.nick, target))
+			if err := from.Send(fmt.Sprintf(":server 401 %s %s :No such nick/channel", from.nick, target)); err != nil {
+				log.Printf("ERROR: Failed to send no such nick error: %v", err)
+			}
 		}
 	}
 }
 
-func (s *Server) broadcastToChannel(channelName string, message string) {
+func (s *Server) broadcastToChannel(channelName string, message string) error {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	
+
 	channel, exists := s.channels[channelName]
 	if !exists {
-		return
+		return fmt.Errorf("channel %s does not exist", channelName)
 	}
 
 	channel.mu.RLock()
@@ -496,19 +579,26 @@ func (s *Server) broadcastToChannel(channelName string, message string) {
 	channel.mu.RUnlock()
 
 	// Send messages after releasing locks to prevent deadlocks
+	var firstErr error
 	for _, client := range clients {
-		client.Send(message)
+		if err := client.Send(message); err != nil {
+			if firstErr == nil {
+				firstErr = fmt.Errorf("failed to broadcast to %s: %w", client.String(), err)
+			}
+			log.Printf("ERROR: Failed to send message to client %s: %v", client.String(), err)
+		}
 	}
+	return firstErr
 }
 
-// SetWebServer sets the web server reference
+// SetWebServer sets the web server reference.
 func (s *Server) SetWebServer(ws *WebServer) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.webServer = ws
 }
 
-// SetConfig sets the server configuration
+// SetConfig sets the server configuration.
 func (s *Server) SetConfig(cfg *config.Config) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -526,7 +616,10 @@ func (s *Server) removeClient(client *Client) {
 
 	// Broadcast departure to each channel
 	for _, channelName := range channels {
-		s.broadcastToChannel(channelName, fmt.Sprintf(":%s QUIT :Client exiting", client))
+		quitMsg := fmt.Sprintf(":%s QUIT :Client exiting", client)
+		if err := s.broadcastToChannel(channelName, quitMsg); err != nil {
+			log.Printf("ERROR: Failed to broadcast quit message: %v", err)
+		}
 	}
 
 	// Now remove the client with write lock

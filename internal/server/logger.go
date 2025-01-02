@@ -3,13 +3,12 @@ package server
 import (
 	"context"
 	"fmt"
+	"ircserver/internal/persistence"
 	"log"
 	"time"
-
-	"ircserver/internal/persistence"
 )
 
-// EventType represents different types of IRC events
+// EventType represents different types of IRC events.
 type EventType string
 
 const (
@@ -22,23 +21,23 @@ const (
 	EventTopic      EventType = "TOPIC"
 )
 
-// Logger handles all IRC event logging
+// Logger handles all IRC event logging.
 type Logger struct {
 	store persistence.Store
 }
 
-// NewLogger creates a new Logger instance
+// NewLogger creates a new Logger instance.
 func NewLogger(store persistence.Store) *Logger {
 	return &Logger{
 		store: store,
 	}
 }
 
-// LogEvent logs a general IRC event
+// LogEvent logs a general IRC event.
 func (l *Logger) LogEvent(ctx context.Context, eventType EventType, client *Client, target, details string) error {
 	// Log to console
 	timestamp := time.Now().Format("2006-01-02 15:04:05")
-	logMsg := fmt.Sprintf("[%s] %s: %s -> %s (%s)", 
+	logMsg := fmt.Sprintf("[%s] %s: %s -> %s (%s)",
 		timestamp, eventType, client.String(), target, details)
 	log.Printf("INFO: %s", logMsg)
 
@@ -61,7 +60,7 @@ func (l *Logger) LogEvent(ctx context.Context, eventType EventType, client *Clie
 	return nil
 }
 
-// LogMessage logs chat messages (PRIVMSG/NOTICE)
+// LogMessage logs chat messages (PRIVMSG/NOTICE).
 func (l *Logger) LogMessage(from *Client, target, msgType, content string) {
 	// Log to console
 	timestamp := time.Now().Format("2006-01-02 15:04:05")
@@ -78,7 +77,7 @@ func (l *Logger) LogMessage(from *Client, target, msgType, content string) {
 	}
 }
 
-// LogError logs error events
+// LogError logs error events.
 func (l *Logger) LogError(msg string, err error) {
 	// Log to console
 	timestamp := time.Now().Format("2006-01-02 15:04:05")

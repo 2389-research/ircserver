@@ -2,23 +2,25 @@ package server
 
 import (
 	"fmt"
-	"ircserver/internal/config"
 	"net"
 	"strings"
 	"testing"
 	"time"
+
+	"ircserver/internal/config"
 )
 
-// mockConn implements net.Conn interface for testing
+// mockConn implements net.Conn interface for testing.
 type mockConn struct {
 	readData  *strings.Reader
 	writeData strings.Builder
 }
 
-func (m *mockConn) Read(b []byte) (n int, err error)   { return m.readData.Read(b) }
-func (m *mockConn) Write(b []byte) (n int, err error)  { return m.writeData.Write(b) }
-func (m *mockConn) Close() error                       { return nil }
-func (m *mockConn) LocalAddr() net.Addr                { return nil }
+func (m *mockConn) Read(b []byte) (n int, err error)  { return m.readData.Read(b) }
+func (m *mockConn) Write(b []byte) (n int, err error) { return m.writeData.Write(b) }
+func (m *mockConn) Close() error                      { return nil }
+func (m *mockConn) LocalAddr() net.Addr               { return nil }
+
 type mockAddr struct{}
 
 func (a *mockAddr) Network() string { return "tcp" }
@@ -95,7 +97,7 @@ func TestClientConnection(t *testing.T) {
 		{
 			name:    "empty nick",
 			input:   "NICK \r\nUSER test 0 * :Test User\r\n",
-			wantErr: false,  // Changed to false since we handle this gracefully now
+			wantErr: false, // Changed to false since we handle this gracefully now
 			expectedResponses: []string{
 				"431 * :No nickname given\r\n",
 			},
@@ -135,7 +137,7 @@ func TestClientConnection(t *testing.T) {
 				if client.nick != tt.nick {
 					t.Errorf("Expected nickname %q, got %q", tt.nick, client.nick)
 				}
-				
+
 				// Verify expected responses
 				output := conn.writeData.String()
 				for _, expected := range tt.expectedResponses {
