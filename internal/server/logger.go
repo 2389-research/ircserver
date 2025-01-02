@@ -19,6 +19,7 @@ const (
 	EventMessage    EventType = "MESSAGE"
 	EventNick       EventType = "NICK"
 	EventTopic      EventType = "TOPIC"
+	EventQuit       EventType = "QUIT"
 )
 
 // Logger handles all IRC event logging.
