@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 
+	"ircserver/internal/config"
 	"ircserver/internal/persistence"
 )
 
