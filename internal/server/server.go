@@ -17,12 +17,12 @@ type Server struct {
 	port     string
 	clients  map[string]*Client
 	channels map[string]*Channel
-	store    *persistence.Store
+	store    persistence.Store
 	mu       sync.RWMutex
 }
 
 // New creates a new IRC server instance
-func New(host, port string, store *persistence.Store) *Server {
+func New(host, port string, store persistence.Store) *Server {
 	return &Server{
 		host:     host,
 		port:     port,
