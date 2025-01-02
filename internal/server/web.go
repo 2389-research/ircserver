@@ -140,14 +140,20 @@ func (ws *WebServer) Shutdown() error {
 }
 
 func (ws *WebServer) collectDashboardData() DashboardData {
+	ws.mu.RLock()
+	messages := ws.messages
+	ws.mu.RUnlock()
+
 	data := DashboardData{
 		Users:    make([]UserInfo, 0),
 		Channels: make([]ChannelInfo, 0),
-		Messages: ws.messages,
+		Messages: messages,
 	}
 
-	// Collect users
+	// Safely collect users
+	ws.ircServer.mu.RLock()
 	for _, client := range ws.ircServer.clients {
+		client.mu.Lock()
 		channels := make([]string, 0)
 		for ch := range client.channels {
 			channels = append(channels, ch)
@@ -159,12 +165,14 @@ func (ws *WebServer) collectDashboardData() DashboardData {
 			Channels: channels,
 			LastSeen: time.Now().Format(time.RFC3339),
 		})
+		client.mu.Unlock()
 	}
 
-	// Collect channels
+	// Safely collect channels
 	for name, channel := range ws.ircServer.channels {
+		channel.mu.RLock()
 		users := make([]string, 0)
-		for _, client := range channel.GetClients() {
+		for _, client := range channel.Clients {
 			users = append(users, client.nick)
 		}
 		
@@ -174,7 +182,9 @@ func (ws *WebServer) collectDashboardData() DashboardData {
 			UserCount: len(users),
 			Users:    users,
 		})
+		channel.mu.RUnlock()
 	}
+	ws.ircServer.mu.RUnlock()
 
 	return data
 }

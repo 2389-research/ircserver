@@ -103,14 +103,23 @@ func (s *Server) handleConnection(conn net.Conn) {
 
 	client := NewClient(conn)
 	reader := bufio.NewReader(conn)
+
+	// Register client in a thread-safe way
+	s.mu.Lock()
+	s.clients[client.String()] = client
+	s.mu.Unlock()
+
 	s.logger.LogEvent(EventConnect, client, "SERVER", 
 		fmt.Sprintf("from %s", conn.RemoteAddr()))
+
+	defer func() {
+		s.removeClient(client)
+		log.Printf("INFO: Client %s disconnected", client)
+	}()
 
 	for {
 		message, err := reader.ReadString('\n')
 		if err != nil {
-			log.Printf("INFO: Client %s disconnected: %v", client, err)
-			s.removeClient(client)
 			return
 		}
 
@@ -431,13 +440,23 @@ func (s *Server) deliverMessage(from *Client, target, msgType, message string) {
 
 func (s *Server) broadcastToChannel(channelName string, message string) {
 	s.mu.RLock()
+	defer s.mu.RUnlock()
+	
 	channel, exists := s.channels[channelName]
-	s.mu.RUnlock()
+	if !exists {
+		return
+	}
 
-	if exists {
-		for _, client := range channel.GetClients() {
-			client.Send(message)
-		}
+	channel.mu.RLock()
+	clients := make([]*Client, 0, len(channel.Clients))
+	for _, client := range channel.Clients {
+		clients = append(clients, client)
+	}
+	channel.mu.RUnlock()
+
+	// Send messages after releasing locks to prevent deadlocks
+	for _, client := range clients {
+		client.Send(message)
 	}
 }
 
