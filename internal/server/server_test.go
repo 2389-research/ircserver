@@ -163,6 +163,9 @@ func TestConcurrentOperations(t *testing.T) {
 		// Success
 	}
 
+	// Give time for channel cleanup
+	time.Sleep(100 * time.Millisecond)
+
 	// Verify final state
 	state := srv.getState()
 	if len(state.channels) != 0 {
