@@ -23,43 +23,93 @@ func (m *mockStore) UpdateUser(ctx context.Context, nickname, username, realname
 func (m *mockStore) UpdateChannel(ctx context.Context, name, topic string) error { return nil }
 
 func TestChannelOperations(t *testing.T) {
+	tests := []struct {
+		name    string
+		channel string
+		want    bool
+	}{
+		{"valid channel", "#test", true},
+		{"invalid no hash", "test", false},
+		{"invalid empty", "", false},
+		{"invalid spaces", "#test channel", false},
+		{"valid with numbers", "#test123", true},
+		{"valid with underscore", "#test_channel", true},
+	}
+
 	cfg := config.DefaultConfig()
 	store := &mockStore{}
 	srv := New("localhost", "0", store, cfg)
 
-	// Create test clients
-	client1 := NewClient(&mockConn{readData: strings.NewReader("")}, cfg)
-	client1.nick = "user1"
-	client2 := NewClient(&mockConn{readData: strings.NewReader("")}, cfg)
-	client2.nick = "user2"
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := NewClient(&mockConn{readData: strings.NewReader("")}, cfg)
+			client.nick = "user1"
+			
+			srv.handleJoin(client, tt.channel)
+			
+			if tt.want {
+				if len(srv.channels) != 1 {
+					t.Errorf("Expected 1 channel, got %d", len(srv.channels))
+				}
+				if !srv.channels[tt.channel].HasClient("user1") {
+					t.Error("Expected user1 to be in channel")
+				}
+			} else {
+				if len(srv.channels) != 0 {
+					t.Error("Expected no channels for invalid channel name")
+				}
+			}
+		})
+	}
+}
 
-	// Test joining a channel
-	srv.handleJoin(client1, "#test")
+func TestChannelMultiUserOperations(t *testing.T) {
+	cfg := config.DefaultConfig()
+	store := &mockStore{}
+	srv := New("localhost", "0", store, cfg)
 
-	if len(srv.channels) != 1 {
-		t.Error("Expected 1 channel, got", len(srv.channels))
+	clients := make([]*Client, 3)
+	for i := range clients {
+		clients[i] = NewClient(&mockConn{readData: strings.NewReader("")}, cfg)
+		clients[i].nick = fmt.Sprintf("user%d", i+1)
+	}
+
+	// Test multiple users joining
+	for _, client := range clients {
+		srv.handleJoin(client, "#test")
 	}
 
 	channel := srv.channels["#test"]
-	if !channel.HasClient("user1") {
-		t.Error("Expected user1 to be in channel")
+	if len(channel.Clients) != 3 {
+		t.Errorf("Expected 3 clients in channel, got %d", len(channel.Clients))
 	}
 
-	// Test second user joining
-	srv.handleJoin(client2, "#test")
-	if !channel.HasClient("user2") {
-		t.Error("Expected user2 to be in channel")
+	// Test topic changes
+	srv.handleTopic(clients[0], "#test", "New Topic")
+	if channel.Topic != "New Topic" {
+		t.Errorf("Expected topic 'New Topic', got '%s'", channel.Topic)
 	}
 
-	// Test parting
-	srv.handlePart(client1, "#test")
-	if channel.HasClient("user1") {
-		t.Error("Expected user1 to have left channel")
+	// Test message broadcasting
+	mockConn := clients[1].conn.(*mockConn)
+	srv.handlePrivMsg(clients[0], "#test", "Hello channel!")
+	if !strings.Contains(mockConn.writeData.String(), "Hello channel!") {
+		t.Error("Expected message to be broadcasted to other clients")
 	}
 
-	// Test channel cleanup
-	srv.handlePart(client2, "#test")
+	// Test sequential parting
+	for i, client := range clients {
+		srv.handlePart(client, "#test")
+		expectedClients := len(clients) - (i + 1)
+		if expectedClients > 0 {
+			if len(channel.Clients) != expectedClients {
+				t.Errorf("Expected %d clients, got %d", expectedClients, len(channel.Clients))
+			}
+		}
+	}
+
+	// Verify channel cleanup after last user parts
 	if len(srv.channels) != 0 {
-		t.Error("Expected empty channel to be removed")
+		t.Error("Expected channel to be removed after last user left")
 	}
 }
