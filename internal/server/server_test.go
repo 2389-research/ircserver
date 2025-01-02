@@ -123,8 +123,10 @@ func TestChannelMultiUserOperations(t *testing.T) {
 	srv := New("localhost", "0", store, cfg)
 
 	clients := make([]*Client, 3)
+	conns := make([]*mockConn, 3)
 	for i := range clients {
-		clients[i] = NewClient(&mockConn{readData: strings.NewReader("")}, cfg)
+		conns[i] = &mockConn{readData: strings.NewReader("")}
+		clients[i] = NewClient(conns[i], cfg)
 		clients[i].nick = fmt.Sprintf("user%d", i+1)
 	}
 
@@ -145,15 +147,42 @@ func TestChannelMultiUserOperations(t *testing.T) {
 	}
 
 	// Test message broadcasting
-	mockConn := clients[1].conn.(*mockConn)
 	srv.handlePrivMsg(clients[0], "#test :Hello channel!")
-	if !strings.Contains(mockConn.writeData.String(), "Hello channel!") {
-		t.Error("Expected message to be broadcasted to other clients")
+	for i := 1; i < len(clients); i++ {
+		if !strings.Contains(conns[i].writeData.String(), "Hello channel!") {
+			t.Errorf("Expected client %d to receive broadcast message", i+1)
+		}
 	}
 
-	// Test sequential parting
+	// Test PART error cases
+	t.Run("part non-existent channel", func(t *testing.T) {
+		srv.handlePart(clients[0], "#nonexistent")
+		if !strings.Contains(conns[0].writeData.String(), "403") {
+			t.Error("Expected error response for non-existent channel")
+		}
+	})
+
+	t.Run("part channel not joined", func(t *testing.T) {
+		srv.handleJoin(clients[0], "#test2")
+		srv.handlePart(clients[1], "#test2")
+		if !strings.Contains(conns[1].writeData.String(), "442") {
+			t.Error("Expected error response for parting channel not joined")
+		}
+	})
+
+	// Test sequential parting with notification verification
 	for i, client := range clients {
+		conns[i].writeData.Reset() // Clear previous messages
 		srv.handlePart(client, "#test")
+		
+		// Verify PART message was broadcast
+		partMsg := fmt.Sprintf(":%s PART #test", client.nick)
+		for j := i + 1; j < len(clients); j++ {
+			if !strings.Contains(conns[j].writeData.String(), partMsg) {
+				t.Errorf("Client %d didn't receive PART notification for client %d", j+1, i+1)
+			}
+		}
+
 		expectedClients := len(clients) - (i + 1)
 		if expectedClients > 0 {
 			if len(channel.Clients) != expectedClients {

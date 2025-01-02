@@ -396,28 +396,51 @@ func (s *Server) handlePart(client *Client, args string) {
 	channels := strings.Split(args, ",")
 	for _, channelName := range channels {
 		channelName = strings.TrimSpace(channelName)
+		
 		s.mu.Lock()
 		channel, exists := s.channels[channelName]
-		if exists {
-			channel.RemoveClient(client.nick)
-			delete(client.channels, channelName)
-
-			// Remove channel if empty
-			if len(channel.GetClients()) == 0 {
-				delete(s.channels, channelName)
-			}
-			s.mu.Unlock()
-
-			partMsg := fmt.Sprintf(":%s PART %s", client, channelName)
-			if err := s.broadcastToChannel(channelName, partMsg); err != nil {
-				log.Printf("ERROR: Failed to broadcast part message: %v", err)
-			}
-		} else {
+		if !exists {
 			s.mu.Unlock()
 			if err := client.Send(fmt.Sprintf(":server 403 %s %s :No such channel", client.nick, channelName)); err != nil {
 				log.Printf("ERROR: Failed to send no such channel error: %v", err)
 			}
+			continue
 		}
+
+		// Check if client is actually in the channel
+		if !channel.HasClient(client.nick) {
+			s.mu.Unlock()
+			if err := client.Send(fmt.Sprintf(":server 442 %s %s :You're not on that channel", client.nick, channelName)); err != nil {
+				log.Printf("ERROR: Failed to send not on channel error: %v", err)
+			}
+			continue
+		}
+
+		// Broadcast PART message before removing the client
+		partMsg := fmt.Sprintf(":%s PART %s", client, channelName)
+		if err := s.broadcastToChannel(channelName, partMsg); err != nil {
+			log.Printf("ERROR: Failed to broadcast part message: %v", err)
+		}
+
+		// Remove client from channel
+		channel.RemoveClient(client.nick)
+		delete(client.channels, channelName)
+
+		// Log the PART event
+		ctx := context.Background()
+		if err := s.logger.LogEvent(ctx, EventPart, client, channelName, ""); err != nil {
+			log.Printf("ERROR: Failed to log part event: %v", err)
+		}
+
+		// Remove channel if empty
+		if len(channel.GetClients()) == 0 {
+			delete(s.channels, channelName)
+			if err := s.logger.LogEvent(ctx, EventChannelDelete, client, channelName, "Channel removed - last user left"); err != nil {
+				log.Printf("ERROR: Failed to log channel deletion: %v", err)
+			}
+		}
+		
+		s.mu.Unlock()
 	}
 }
 
