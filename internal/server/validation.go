@@ -19,7 +19,18 @@ func isValidChannelName(name string) bool {
 }
 
 func isValidNick(nick string) bool {
-	for _, r := range nick {
+	// RFC 1459: nicknames must be max 9 chars
+	if len(nick) > 9 {
+		return false
+	}
+	
+	// Must start with a letter
+	if len(nick) == 0 || !unicode.IsLetter(rune(nick[0])) {
+		return false
+	}
+
+	// Can only contain letters, numbers, - and _
+	for _, r := range nick[1:] {
 		if !unicode.IsLetter(r) && !unicode.IsNumber(r) && r != '-' && r != '_' {
 			return false
 		}

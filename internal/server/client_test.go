@@ -73,6 +73,39 @@ func TestClientConnection(t *testing.T) {
 		expectedResponses []string
 	}{
 		{
+			name:    "nickname too long",
+			input:   "NICK toolongnick123\r\nUSER test 0 * :Test User\r\n",
+			wantErr: false,
+			expectedResponses: []string{
+				"432 * toolongnick123 :Erroneous nickname - must be 1-9 chars, start with letter, and contain only letters, numbers, - or _\r\n",
+			},
+		},
+		{
+			name:    "nickname with invalid characters",
+			input:   "NICK bad@nick\r\nUSER test 0 * :Test User\r\n",
+			wantErr: false,
+			expectedResponses: []string{
+				"432 * bad@nick :Erroneous nickname - must be 1-9 chars, start with letter, and contain only letters, numbers, - or _\r\n",
+			},
+		},
+		{
+			name:    "nickname starting with number",
+			input:   "NICK 1nick\r\nUSER test 0 * :Test User\r\n",
+			wantErr: false,
+			expectedResponses: []string{
+				"432 * 1nick :Erroneous nickname - must be 1-9 chars, start with letter, and contain only letters, numbers, - or _\r\n",
+			},
+		},
+		{
+			name:    "valid nickname with underscore",
+			input:   "NICK nick_123\r\nUSER test 0 * :Test User\r\n",
+			nick:    "nick_123",
+			wantErr: false,
+			expectedResponses: []string{
+				":* NICK nick_123\r\n",
+			},
+		},
+		{
 			name:    "valid connection with nick",
 			input:   "NICK validnick\r\nUSER test 0 * :Test User\r\n",
 			nick:    "validnick",

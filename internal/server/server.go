@@ -230,8 +230,17 @@ func (s *Server) handleNick(client *Client, args string) error {
 	defer s.mu.Unlock()
 
 	// Check if nickname is already in use
+	// Check nickname validity first
+	if !isValidNick(newNick) {
+		if err := client.Send(fmt.Sprintf(":server 432 * %s :Erroneous nickname - must be 1-9 chars, start with letter, and contain only letters, numbers, - or _", newNick)); err != nil {
+			log.Printf("ERROR: Failed to send invalid nickname error: %v", err)
+		}
+		return fmt.Errorf("invalid nickname format: %s", newNick)
+	}
+
+	// Then check for collisions
 	if _, exists := s.clients[newNick]; exists {
-		if err := client.Send(":server 433 * " + newNick + " :Nickname is already in use"); err != nil {
+		if err := client.Send(fmt.Sprintf(":server 433 * %s :Nickname is already in use", newNick)); err != nil {
 			log.Printf("ERROR: Failed to send nickname in use error: %v", err)
 		}
 		return fmt.Errorf("nickname %s already in use", newNick)
