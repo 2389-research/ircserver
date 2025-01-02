@@ -321,7 +321,8 @@ func (s *Server) handleJoin(client *Client, args string) {
 	channels := strings.Split(args, ",")
 	for _, channelName := range channels {
 		channelName = strings.TrimSpace(channelName)
-		// Validate channel name
+		
+		// Validate channel name before acquiring lock
 		if !isValidChannelName(channelName) {
 			if err := client.Send(fmt.Sprintf(":server 403 %s %s :Invalid channel name", client.nick, channelName)); err != nil {
 				log.Printf("ERROR: Failed to send invalid channel name error: %v", err)
@@ -332,6 +333,11 @@ func (s *Server) handleJoin(client *Client, args string) {
 		s.mu.Lock()
 		channel, exists := s.channels[channelName]
 		if !exists {
+			// Double-check validation inside lock to prevent race conditions
+			if !isValidChannelName(channelName) {
+				s.mu.Unlock()
+				continue
+			}
 			channel = NewChannel(channelName)
 			s.channels[channelName] = channel
 		}
