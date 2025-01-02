@@ -14,7 +14,7 @@ type Server struct {
 	host     string
 	port     string
 	clients  map[string]*Client
-	channels map[string]map[string]bool
+	channels map[string]*Channel
 	mu       sync.RWMutex
 }
 
@@ -24,7 +24,7 @@ func New(host, port string) *Server {
 		host:     host,
 		port:     port,
 		clients:  make(map[string]*Client),
-		channels: make(map[string]map[string]bool),
+		channels: make(map[string]*Channel),
 	}
 }
 
@@ -165,15 +165,30 @@ func (s *Server) handleJoin(client *Client, args string) {
 		}
 
 		s.mu.Lock()
-		if s.channels[channelName] == nil {
-			s.channels[channelName] = make(map[string]bool)
+		channel, exists := s.channels[channelName]
+		if !exists {
+			channel = NewChannel(channelName)
+			s.channels[channelName] = channel
 		}
-		s.channels[channelName][client.nick] = true
+		channel.AddClient(client)
 		client.channels[channelName] = true
 		s.mu.Unlock()
 
-		// Notify all clients in the channel
+		// Send JOIN message to all clients in the channel
 		s.broadcastToChannel(channelName, fmt.Sprintf(":%s JOIN %s", client, channelName))
+		
+		// Send channel topic if it exists
+		if topic := channel.GetTopic(); topic != "" {
+			client.Send(fmt.Sprintf(":server 332 %s %s :%s", client.nick, channelName, topic))
+		}
+
+		// Send list of users in channel
+		names := []string{}
+		for _, c := range channel.GetClients() {
+			names = append(names, c.nick)
+		}
+		client.Send(fmt.Sprintf(":server 353 %s = %s :%s", client.nick, channelName, strings.Join(names, " ")))
+		client.Send(fmt.Sprintf(":server 366 %s %s :End of /NAMES list", client.nick, channelName))
 	}
 }
 
@@ -187,10 +202,17 @@ func (s *Server) handlePart(client *Client, args string) {
 	for _, channelName := range channels {
 		channelName = strings.TrimSpace(channelName)
 		s.mu.Lock()
-		if s.channels[channelName] != nil {
-			delete(s.channels[channelName], client.nick)
+		channel, exists := s.channels[channelName]
+		if exists {
+			channel.RemoveClient(client.nick)
 			delete(client.channels, channelName)
+			
+			// Remove channel if empty
+			if len(channel.GetClients()) == 0 {
+				delete(s.channels, channelName)
+			}
 			s.mu.Unlock()
+			
 			s.broadcastToChannel(channelName, fmt.Sprintf(":%s PART %s", client, channelName))
 		} else {
 			s.mu.Unlock()
@@ -248,15 +270,14 @@ func (s *Server) deliverMessage(from *Client, target, msgType, message string) {
 	}
 }
 
-func (s *Server) broadcastToChannel(channel string, message string) {
+func (s *Server) broadcastToChannel(channelName string, message string) {
 	s.mu.RLock()
-	defer s.mu.RUnlock()
+	channel, exists := s.channels[channelName]
+	s.mu.RUnlock()
 
-	if channelClients, exists := s.channels[channel]; exists {
-		for nick := range channelClients {
-			if client, ok := s.clients[nick]; ok {
-				client.Send(message)
-			}
+	if exists {
+		for _, client := range channel.GetClients() {
+			client.Send(message)
 		}
 	}
 }
