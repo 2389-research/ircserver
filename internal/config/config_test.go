@@ -109,10 +109,14 @@ func TestConfigReloading(t *testing.T) {
 	if err := os.MkdirAll("testdata", 0755); err != nil {
 		t.Fatalf("Failed to create testdata directory: %v", err)
 	}
-	
+
 	cfg, err := Load("testdata/valid_config.yaml")
 	if err != nil {
 		t.Fatalf("Failed to load valid config: %v", err)
+	}
+
+	if cfg == nil {
+		t.Fatalf("Expected config to be loaded, got nil")
 	}
 
 	// Modify the config file
