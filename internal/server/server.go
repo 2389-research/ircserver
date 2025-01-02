@@ -325,7 +325,10 @@ func (s *Server) handleJoin(client *Client, args string) {
 		s.mu.Unlock()
 
 		// Send JOIN message to all clients in the channel
-		s.broadcastToChannel(channelName, fmt.Sprintf(":%s JOIN %s", client, channelName))
+		joinMsg := fmt.Sprintf(":%s JOIN %s", client, channelName)
+		if err := s.broadcastToChannel(channelName, joinMsg); err != nil {
+			log.Printf("ERROR: Failed to broadcast join message: %v", err)
+		}
 
 		// Send channel topic if it exists
 		if topic := channel.GetTopic(); topic != "" {
@@ -371,7 +374,10 @@ func (s *Server) handlePart(client *Client, args string) {
 			}
 			s.mu.Unlock()
 
-			s.broadcastToChannel(channelName, fmt.Sprintf(":%s PART %s", client, channelName))
+			partMsg := fmt.Sprintf(":%s PART %s", client, channelName)
+			if err := s.broadcastToChannel(channelName, partMsg); err != nil {
+				log.Printf("ERROR: Failed to broadcast part message: %v", err)
+			}
 		} else {
 			s.mu.Unlock()
 			client.Send(fmt.Sprintf(":server 403 %s %s :No such channel", client.nick, channelName))
@@ -457,7 +463,10 @@ func (s *Server) handleTopic(client *Client, args string) {
 	channel.SetTopic(newTopic)
 
 	// Broadcast the topic change to all channel members
-	s.broadcastToChannel(channelName, fmt.Sprintf(":%s TOPIC %s :%s", client, channelName, newTopic))
+	topicMsg := fmt.Sprintf(":%s TOPIC %s :%s", client, channelName, newTopic)
+	if err := s.broadcastToChannel(channelName, topicMsg); err != nil {
+		log.Printf("ERROR: Failed to broadcast topic change: %v", err)
+	}
 
 	// Log the topic change
 	ctx := context.Background()
@@ -509,7 +518,9 @@ func (s *Server) handleWho(client *Client, args string) {
 		}
 	}
 
-	client.Send(fmt.Sprintf(":server 315 %s %s :End of WHO list", client.nick, target))
+	if err := client.Send(fmt.Sprintf(":server 315 %s %s :End of WHO list", client.nick, target)); err != nil {
+		log.Printf("ERROR: Failed to send end of WHO list: %v", err)
+	}
 }
 
 func (s *Server) deliverMessage(from *Client, target, msgType, message string) {
@@ -547,7 +558,7 @@ func (s *Server) deliverMessage(from *Client, target, msgType, message string) {
 	}
 }
 
-func (s *Server) broadcastToChannel(channelName string, message string) {
+func (s *Server) broadcastToChannel(channelName string, message string) error {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -564,9 +575,16 @@ func (s *Server) broadcastToChannel(channelName string, message string) {
 	channel.mu.RUnlock()
 
 	// Send messages after releasing locks to prevent deadlocks
+	var firstErr error
 	for _, client := range clients {
-		client.Send(message)
+		if err := client.Send(message); err != nil {
+			if firstErr == nil {
+				firstErr = fmt.Errorf("failed to broadcast to %s: %w", client.String(), err)
+			}
+			log.Printf("ERROR: Failed to send message to client %s: %v", client.String(), err)
+		}
 	}
+	return firstErr
 }
 
 // SetWebServer sets the web server reference.
@@ -594,7 +612,10 @@ func (s *Server) removeClient(client *Client) {
 
 	// Broadcast departure to each channel
 	for _, channelName := range channels {
-		s.broadcastToChannel(channelName, fmt.Sprintf(":%s QUIT :Client exiting", client))
+		quitMsg := fmt.Sprintf(":%s QUIT :Client exiting", client)
+		if err := s.broadcastToChannel(channelName, quitMsg); err != nil {
+			log.Printf("ERROR: Failed to broadcast quit message: %v", err)
+		}
 	}
 
 	// Now remove the client with write lock
