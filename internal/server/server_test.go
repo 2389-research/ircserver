@@ -2,7 +2,9 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"strings"
+	"sync"
 	"testing"
 
 	"ircserver/internal/config"
