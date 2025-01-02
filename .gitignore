@@ -1,6 +1,5 @@
 .aider*
 .env
 output.txt
-ircserver
 coverage.out
 coverage.html
