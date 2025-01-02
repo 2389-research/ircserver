@@ -18,21 +18,28 @@ type testClient struct {
 }
 
 func (t *testClient) Send(msg string) error {
+	// First capture the message
 	t.messages = append(t.messages, msg)
-	// Call the underlying Client's Send for proper logging
-	return t.Client.Send(msg)
+	// Then let the underlying client handle it
+	if t.Client != nil {
+		return t.Client.Send(msg)
+	}
+	return nil
 }
 
 // Ensure testClient implements necessary methods
 var _ interface{ Send(string) error } = (*testClient)(nil)
 
 func newTestClient(nick string, cfg *config.Config) *testClient {
-	client := NewClient(&mockConn{readData: strings.NewReader("")}, cfg)
+	mockConn := &mockConn{readData: strings.NewReader("")}
+	client := NewClient(mockConn, cfg)
 	client.nick = nick
-	return &testClient{
+	
+	tc := &testClient{
 		Client:   client,
 		messages: make([]string, 0),
 	}
+	return tc
 }
 
 // mockStore implements persistence.Store interface for testing.
