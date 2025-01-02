@@ -630,12 +630,12 @@ func (s *Server) deliverMessage(from *Client, target, msgType, message string) {
 		s.webServer.AddMessage(from.String(), target, msgType, message)
 	}
 
-	formattedMsg := fmt.Sprintf(":%s %s %s :%s\r\n", from, msgType, target, message)
+	formattedMsg := fmt.Sprintf(":%s %s %s :%s", from, msgType, target, message)
 
 	if strings.HasPrefix(target, "#") {
 		s.mu.RLock()
 		if _, exists := s.channels[target]; exists {
-			s.mu.RUnlock()
+			s.mu.RUnlock() 
 			if err := s.broadcastToChannel(target, formattedMsg); err != nil {
 				log.Printf("ERROR: Failed to broadcast channel message: %v", err)
 			}
@@ -651,6 +651,7 @@ func (s *Server) deliverMessage(from *Client, target, msgType, message string) {
 			s.mu.RUnlock()
 			if err := to.Send(formattedMsg); err != nil {
 				log.Printf("ERROR: Failed to deliver message to %s: %v", target, err)
+				return
 			}
 		} else {
 			s.mu.RUnlock()
