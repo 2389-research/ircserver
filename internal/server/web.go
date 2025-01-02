@@ -11,6 +11,7 @@ import (
 type WebServer struct {
 	ircServer *Server
 	templates *template.Template
+	messages  []MessageInfo
 	mu        sync.RWMutex
 }
 
@@ -80,6 +81,25 @@ func (ws *WebServer) handleAPIData(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(data)
 }
 
+func (ws *WebServer) AddMessage(from, to, msgType, content string) {
+	ws.mu.Lock()
+	defer ws.mu.Unlock()
+
+	msg := MessageInfo{
+		Time:    time.Now().Format(time.RFC3339),
+		From:    from,
+		To:      to,
+		Type:    msgType,
+		Content: content,
+	}
+
+	// Keep last 100 messages
+	if len(ws.messages) >= 100 {
+		ws.messages = ws.messages[1:]
+	}
+	ws.messages = append(ws.messages, msg)
+}
+
 func (ws *WebServer) handleAPISend(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -104,6 +124,7 @@ func (ws *WebServer) handleAPISend(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ws.ircServer.deliverMessage(adminClient, msg.Target, "PRIVMSG", msg.Content)
+	ws.AddMessage("WebAdmin", msg.Target, "PRIVMSG", msg.Content)
 	
 	w.WriteHeader(http.StatusOK)
 }
@@ -112,6 +133,7 @@ func (ws *WebServer) collectDashboardData() DashboardData {
 	data := DashboardData{
 		Users:    make([]UserInfo, 0),
 		Channels: make([]ChannelInfo, 0),
+		Messages: ws.messages,
 	}
 
 	// Collect users

@@ -17,6 +17,36 @@ body {
     margin-bottom: 20px;
 }
 
+.messages-panel {
+    margin: 20px 0;
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+#messages-list {
+    display: flex;
+    flex-direction: column-reverse;
+}
+
+.message {
+    padding: 8px;
+    border-bottom: 1px solid #eee;
+}
+
+.message .time {
+    color: #666;
+    font-size: 0.8em;
+}
+
+.message .from {
+    font-weight: bold;
+    color: #007bff;
+}
+
+.message .to {
+    color: #28a745;
+}
+
 .panel {
     background: white;
     padding: 20px;

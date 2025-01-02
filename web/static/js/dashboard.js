@@ -32,8 +32,21 @@ function updateDashboard() {
         .then(data => {
             updateUsersList(data.users);
             updateChannelsList(data.channels);
+            updateMessagesList(data.messages);
         })
         .catch(error => console.error('Error:', error));
+}
+
+function updateMessagesList(messages) {
+    const messagesList = document.getElementById('messages-list');
+    messagesList.innerHTML = messages.map(msg => `
+        <div class="message">
+            <span class="time">[${new Date(msg.time).toLocaleTimeString()}]</span>
+            <span class="from">${msg.from}</span> →
+            <span class="to">${msg.to}</span>:
+            <span class="content">${msg.content}</span>
+        </div>
+    `).join('');
 }
 
 function updateUsersList(users) {
