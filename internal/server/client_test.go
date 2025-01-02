@@ -119,7 +119,7 @@ func TestClientConnection(t *testing.T) {
 			input:   "NICK invalid@nick\r\nUSER test 0 * :Test User\r\n",
 			wantErr: false,
 			expectedResponses: []string{
-				"432 * :Erroneous nickname\r\n",
+				"432 * invalid@nick :Erroneous nickname - must be 1-9 chars, start with letter, and contain only letters, numbers, - or _\r\n",
 			},
 		},
 		{
