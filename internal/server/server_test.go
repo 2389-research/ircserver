@@ -5,10 +5,21 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"ircserver/internal/persistence"
 )
 
+// mockStore implements a no-op store for testing
+type mockStore struct{}
+
+func (m *mockStore) Close() error                       { return nil }
+func (m *mockStore) LogMessage(channel, nick, msg string) error { return nil }
+func (m *mockStore) UpdateUserInfo(nickname, username, realname, ipAddr string) error { return nil }
+func (m *mockStore) UpdateChannelInfo(name, topic string) error { return nil }
+
 func TestChannelOperations(t *testing.T) {
-	srv := New("localhost", "0")
+	store := &mockStore{}
+	srv := New("localhost", "0", store)
 	
 	// Create test clients
 	client1 := NewClient(&mockConn{readData: strings.NewReader("")})
@@ -48,7 +59,8 @@ func TestChannelOperations(t *testing.T) {
 }
 
 func TestServerAcceptsConnections(t *testing.T) {
-	srv := New("localhost", "6668")
+	store := &mockStore{}
+	srv := New("localhost", "6668", store)
 
 	// Start server in a goroutine
 	go func() {
