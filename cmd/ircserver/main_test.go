@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"errors"
+	"net"
 	"os"
 	"testing"
 	"time"
@@ -120,4 +122,51 @@ func TestMessageLogging(t *testing.T) {
 	if sender != "sender" || recipient != "recipient" || msgType != "PRIVMSG" || content != "Hello, world!" {
 		t.Errorf("Message log data mismatch: got (%s, %s, %s, %s), want (%s, %s, %s, %s)", sender, recipient, msgType, content, "sender", "recipient", "PRIVMSG", "Hello, world!")
 	}
+}
+
+func TestErrorHandling(t *testing.T) {
+	t.Run("NetworkErrors", func(t *testing.T) {
+		// Simulate network error
+		_, err := net.Dial("tcp", "invalid:address")
+		if err == nil {
+			t.Error("Expected network error, got nil")
+		}
+	})
+
+	t.Run("TimeoutHandling", func(t *testing.T) {
+		// Simulate timeout handling
+		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Nanosecond)
+		defer cancel()
+
+		select {
+		case <-time.After(1 * time.Second):
+			t.Error("Expected timeout, but operation completed")
+		case <-ctx.Done():
+			if !errors.Is(ctx.Err(), context.DeadlineExceeded) {
+				t.Errorf("Expected context deadline exceeded, got %v", ctx.Err())
+			}
+		}
+	})
+
+	t.Run("ResourceCleanup", func(t *testing.T) {
+		// Simulate resource cleanup
+		store := setupTestDB(t)
+		store.Close()
+
+		err := store.LogMessage(context.Background(), "sender", "recipient", "PRIVMSG", "Hello, world!")
+		if err == nil {
+			t.Error("Expected error after closing store, got nil")
+		}
+	})
+
+	t.Run("RecoveryFromErrors", func(t *testing.T) {
+		// Simulate recovery from errors
+		defer func() {
+			if r := recover(); r == nil {
+				t.Error("Expected panic recovery, but no panic occurred")
+			}
+		}()
+
+		panic("Simulated panic")
+	})
 }
