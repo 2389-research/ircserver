@@ -208,7 +208,7 @@ func (s *Server) handleNick(client *Client, args string) error {
 	// Check if nickname is already in use
 	if _, exists := s.clients[newNick]; exists {
 		client.Send(":server 433 * " + newNick + " :Nickname is already in use")
-		return
+		return fmt.Errorf("nickname %s already in use", newNick)
 	}
 
 	// If client already had a nickname, update the clients map
@@ -219,6 +219,7 @@ func (s *Server) handleNick(client *Client, args string) error {
 	client.nick = newNick
 	s.clients[newNick] = client
 	client.Send(fmt.Sprintf(":%s NICK %s", client, newNick))
+	return nil
 }
 
 func (s *Server) handleUser(client *Client, args string) {
@@ -277,7 +278,8 @@ func (s *Server) handleJoin(client *Client, args string) {
 		ctx := context.Background()
 		s.logger.LogEvent(ctx, EventJoin, client, channelName, "")
 		
-		if err := s.store.UpdateChannel(channelName, channel.GetTopic()); err != nil {
+		ctx := context.Background()
+		if err := s.store.UpdateChannel(ctx, channelName, channel.GetTopic()); err != nil {
 			s.logger.LogError("Failed to store channel info", err)
 		}
 		
@@ -399,7 +401,8 @@ func (s *Server) handleTopic(client *Client, args string) {
 	s.broadcastToChannel(channelName, fmt.Sprintf(":%s TOPIC %s :%s", client, channelName, newTopic))
 	
 	// Log the topic change
-	s.logger.LogEvent(EventTopic, client, channelName, newTopic)
+	ctx := context.Background()
+	s.logger.LogEvent(ctx, EventTopic, client, channelName, newTopic)
 }
 
 func (s *Server) handleWho(client *Client, args string) {
