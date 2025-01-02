@@ -102,7 +102,7 @@ func TestConcurrentWebRequests(t *testing.T) {
 }
 
 func TestWebInterfaceAuthentication(t *testing.T) {
-	ws := setupTestWebServer()
+	ws := setupTestWebServer(t)
 
 	req, err := http.NewRequest("GET", "/api/data", nil)
 	if err != nil {
