@@ -48,7 +48,7 @@ func DefaultConfig() *Config {
 	cfg.IRC.DefaultChannel = "#general"
 	cfg.IRC.MaxMessageLength = 512
 	cfg.IRC.ReadTimeout = 300 * time.Second
-	cfg.IRC.WriteTimeout = 60 * time.Second
+	cfg.IRC.WriteTimeout = 180 * time.Second
 	cfg.IRC.MaxBufferSize = 4096
 	cfg.IRC.IdleTimeout = 600 * time.Second
 	cfg.IRC.MaxRetries = 3

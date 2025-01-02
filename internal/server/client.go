@@ -63,11 +63,24 @@ func (c *Client) Send(message string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	// Set write deadline
+	if err := c.conn.SetWriteDeadline(time.Now().Add(c.config.IRC.WriteTimeout)); err != nil {
+		log.Printf("DEBUG: Failed to set write deadline for client %s: %v", c.String(), err)
+		return err
+	}
+
 	// For immediate responses, write directly
 	if _, err := c.writer.WriteString(message + "\r\n"); err != nil {
 		return err
 	}
-	return c.writer.Flush()
+	err := c.writer.Flush()
+	
+	// Clear write deadline after successful write
+	if clearErr := c.conn.SetWriteDeadline(time.Time{}); clearErr != nil {
+		log.Printf("DEBUG: Failed to clear write deadline for client %s: %v", c.String(), clearErr)
+	}
+	
+	return err
 }
 
 func (c *Client) monitorIdle() {
@@ -116,7 +129,8 @@ func (c *Client) pingLoop() {
 			return
 		case <-ticker.C:
 			timestamp := time.Now().Unix()
-			log.Printf("DEBUG: Sending PING to client %s with timestamp %d", c.String(), timestamp)
+			log.Printf("DEBUG: Initiating PING cycle for client %s with timestamp %d", c.String(), timestamp)
+			
 			if err := c.Send(fmt.Sprintf("PING :%d", timestamp)); err != nil {
 				log.Printf("ERROR: Failed to send PING to client %s: %v", c.String(), err)
 				c.conn.Close()
@@ -128,9 +142,12 @@ func (c *Client) pingLoop() {
 			c.mu.Lock()
 			if c.pingTimer == nil {
 				c.pingTimer = time.AfterFunc(180*time.Second, func() {
+					c.mu.Lock()
+					defer c.mu.Unlock()
 					log.Printf("INFO: Client %s timed out - no PONG response within 180 seconds", c.String())
 					c.conn.Close()
 				})
+				log.Printf("DEBUG: Set PING timeout timer for client %s", c.String())
 			}
 			c.mu.Unlock()
 		}
@@ -164,18 +181,23 @@ func (c *Client) handleConnection() error {
 				continue
 			}
 			timestamp := strings.TrimPrefix(parts[1], ":")
-			log.Printf("DEBUG: Received PONG from client %s with timestamp %s", c.String(), timestamp)
+			now := time.Now()
+			log.Printf("DEBUG: Received PONG from client %s with timestamp %s at %v", c.String(), timestamp, now)
 			
 			c.mu.Lock()
-			c.lastPong = time.Now()
+			c.lastPong = now
 			if c.pingTimer != nil {
 				c.pingTimer.Stop()
 				c.pingTimer = nil
+				log.Printf("DEBUG: Cleared PING timeout timer for client %s", c.String())
 			}
 			c.mu.Unlock()
-			
-			// Don't continue - let the connection stay alive
-			// for subsequent commands
+
+			// Reset read deadline after successful PONG
+			if err := c.conn.SetReadDeadline(time.Now().Add(c.config.IRC.ReadTimeout)); err != nil {
+				log.Printf("DEBUG: Failed to reset read deadline for client %s: %v", c.String(), err)
+				return err
+			}
 			
 		case "NICK":
 			var nick string
