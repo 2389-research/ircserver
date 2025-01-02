@@ -95,6 +95,7 @@ func (s *Server) Start() error {
 
 			go s.handleConnection(conn)
 		}
+	}
 }
 
 func (s *Server) handleConnection(conn net.Conn) {
