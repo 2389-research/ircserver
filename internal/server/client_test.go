@@ -1,6 +1,7 @@
 package server
 
 import (
+	"ircserver/internal/config"
 	"net"
 	"strings"
 	"testing"
@@ -28,8 +29,9 @@ func (m *mockConn) SetReadDeadline(t time.Time) error  { return nil }
 func (m *mockConn) SetWriteDeadline(t time.Time) error { return nil }
 
 func TestNewClient(t *testing.T) {
+	cfg := config.DefaultConfig()
 	conn := &mockConn{readData: strings.NewReader("")}
-	client := NewClient(conn)
+	client := NewClient(conn, cfg)
 
 	if client.conn != conn {
 		t.Error("NewClient did not set connection correctly")
@@ -43,8 +45,9 @@ func TestNewClient(t *testing.T) {
 }
 
 func TestClientSend(t *testing.T) {
+	cfg := config.DefaultConfig()
 	conn := &mockConn{readData: strings.NewReader("")}
-	client := NewClient(conn)
+	client := NewClient(conn, cfg)
 
 	message := "TEST MESSAGE"
 	err := client.Send(message)
@@ -59,8 +62,9 @@ func TestClientSend(t *testing.T) {
 }
 
 func TestClientString(t *testing.T) {
+	cfg := config.DefaultConfig()
 	conn := &mockConn{readData: strings.NewReader("")}
-	client := NewClient(conn)
+	client := NewClient(conn, cfg)
 
 	// Test with no nickname
 	if got := client.String(); got != "unknown" {

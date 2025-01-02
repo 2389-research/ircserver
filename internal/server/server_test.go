@@ -1,6 +1,8 @@
 package server
 
 import (
+	"context"
+	"ircserver/internal/config"
 	"ircserver/internal/persistence"
 	"net"
 	"strings"
@@ -13,19 +15,21 @@ type mockStore struct{}
 
 var _ persistence.Store = (*mockStore)(nil) // Compile-time interface check
 
-func (m *mockStore) Close() error                                                { return nil }
-func (m *mockStore) LogMessage(sender, recipient, msgType, content string) error { return nil }
-func (m *mockStore) UpdateUser(nickname, username, realname, ipAddr string) error { return nil }
-func (m *mockStore) UpdateChannel(name, topic string) error                      { return nil }
+func (m *mockStore) Close() error { return nil }
+func (m *mockStore) LogMessage(ctx context.Context, sender, recipient, msgType, content string) error { return nil }
+func (m *mockStore) UpdateUser(ctx context.Context, nickname, username, realname, ipAddr string) error { return nil }
+func (m *mockStore) UpdateChannel(ctx context.Context, name, topic string) error { return nil }
 
 func TestChannelOperations(t *testing.T) {
 	store := &mockStore{}
 	srv := New("localhost", "0", store)
 	
+	cfg := config.DefaultConfig()
+	
 	// Create test clients
-	client1 := NewClient(&mockConn{readData: strings.NewReader("")})
+	client1 := NewClient(&mockConn{readData: strings.NewReader("")}, cfg)
 	client1.nick = "user1"
-	client2 := NewClient(&mockConn{readData: strings.NewReader("")})
+	client2 := NewClient(&mockConn{readData: strings.NewReader("")}, cfg)
 	client2.nick = "user2"
 	
 	// Test joining a channel
