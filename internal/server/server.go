@@ -30,7 +30,10 @@ type Server struct {
 }
 
 // New creates a new IRC server instance
-func New(host, port string, store persistence.Store) *Server {
+func New(host, port string, store persistence.Store, cfg *config.Config) *Server {
+	if cfg == nil {
+		cfg = config.DefaultConfig()
+	}
 	return &Server{
 		host:      host,
 		port:      port,
@@ -39,6 +42,7 @@ func New(host, port string, store persistence.Store) *Server {
 		store:     store,
 		logger:    NewLogger(store),
 		webServer: nil,
+		config:    cfg,
 		shutdown:  make(chan struct{}),
 	}
 }
