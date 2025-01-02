@@ -621,13 +621,16 @@ func (s *Server) deliverMessage(from *Client, target, msgType, message string) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
+	ctx := context.Background()
+	s.logger.LogMessage(from, target, msgType, message)
+
 	// Track message in web interface if available
 	if s.webServer != nil {
 		s.webServer.AddMessage(from.String(), target, msgType, message)
 	}
 
 	if strings.HasPrefix(target, "#") {
-		channel, exists := s.channels[target]
+		_, exists := s.channels[target]
 		if !exists {
 			err := from.Send(fmt.Sprintf(":server 403 %s %s :No such channel", from.nick, target))
 			if err != nil {
@@ -725,7 +728,7 @@ func (s *Server) removeClient(client *Client) {
 
 	// Remove from channels
 	for _, channelName := range channels {
-		if ch := s.channels[channelName]; ch != nil {
+		if ch, exists := s.channels[channelName]; exists {
 			ch.RemoveClient(client.nick)
 			// If channel is empty, remove it
 			if len(ch.GetClients()) == 0 {
