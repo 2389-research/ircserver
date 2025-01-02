@@ -205,3 +205,69 @@ func TestMessageSendRetries(t *testing.T) {
 		t.Fatalf("Failed to log message after retries: %v", err)
 	}
 }
+
+func TestNickCommand(t *testing.T) {
+	store := setupTestDB(t)
+	defer store.Close()
+
+	ctx := context.Background()
+	err := store.UpdateUser(ctx, "testuser", "testuser", "Test User", "127.0.0.1")
+	if err != nil {
+		t.Fatalf("Failed to update user: %v", err)
+	}
+
+	// Test ERR_NICKNAMEINUSE
+	err = store.UpdateUser(ctx, "testuser", "testuser", "Test User", "127.0.0.1")
+	if err == nil {
+		t.Error("Expected ERR_NICKNAMEINUSE, got nil")
+	}
+}
+
+func TestJoinCommand(t *testing.T) {
+	store := setupTestDB(t)
+	defer store.Close()
+
+	ctx := context.Background()
+	err := store.UpdateChannel(ctx, "#testchannel", "Test Topic")
+	if err != nil {
+		t.Fatalf("Failed to update channel: %v", err)
+	}
+
+	// Test ERR_USERONCHANNEL
+	err = store.UpdateChannel(ctx, "#testchannel", "Test Topic")
+	if err == nil {
+		t.Error("Expected ERR_USERONCHANNEL, got nil")
+	}
+
+	// Test channel prefix rules
+	err = store.UpdateChannel(ctx, "testchannel", "Test Topic")
+	if err == nil {
+		t.Error("Expected invalid channel name error, got nil")
+	}
+}
+
+func TestNicknameValidation(t *testing.T) {
+	store := setupTestDB(t)
+	defer store.Close()
+
+	ctx := context.Background()
+	err := store.UpdateUser(ctx, "toolongnick123", "toolongnick123", "Test User", "127.0.0.1")
+	if err == nil {
+		t.Error("Expected nickname too long error, got nil")
+	}
+
+	err = store.UpdateUser(ctx, "bad@nick", "bad@nick", "Test User", "127.0.0.1")
+	if err == nil {
+		t.Error("Expected invalid character error, got nil")
+	}
+
+	err = store.UpdateUser(ctx, "1nick", "1nick", "Test User", "127.0.0.1")
+	if err == nil {
+		t.Error("Expected nickname starting with number error, got nil")
+	}
+
+	err = store.UpdateUser(ctx, "nick_123", "nick_123", "Test User", "127.0.0.1")
+	if err != nil {
+		t.Errorf("Expected valid nickname, got error: %v", err)
+	}
+}
