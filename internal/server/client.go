@@ -110,6 +110,10 @@ func (c *Client) handleConnection() error {
 		c.UpdateActivity()
 		line = strings.TrimSpace(line)
 		
+		if line == "" {
+			continue
+		}
+		
 		if strings.HasPrefix(line, "NICK ") {
 			nick := strings.TrimPrefix(line, "NICK ")
 			if nick == "" {
@@ -130,6 +134,9 @@ func (c *Client) handleConnection() error {
 			c.realname = strings.TrimPrefix(strings.Join(parts[4:], " "), ":")
 			return nil
 		}
+		
+		// Unknown command
+		log.Printf("WARN: Unknown command from %s: %s", c.String(), strings.Split(line, " ")[0])
 	}
 }
 

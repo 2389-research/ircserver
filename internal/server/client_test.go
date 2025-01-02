@@ -71,7 +71,7 @@ func TestClientConnection(t *testing.T) {
 	}{
 		{
 			name:    "valid connection with nick",
-			input:   "NICK validnick\r\nUSER test 0 * :Test User\r\n",
+			input:   "NICK validnick\r\nUSER test 0 * :Test User\r\n\n",
 			nick:    "validnick",
 			wantErr: false,
 		},
@@ -158,9 +158,9 @@ func TestConnectionTimeout(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.IRC.ReadTimeout = 100 * time.Millisecond // Short timeout for testing
 
-	// Create a slow/hanging connection
+	// Create a connection that will timeout
 	conn := &mockConn{
-		readData: strings.NewReader(""), // Empty reader will block
+		readData: strings.NewReader("NICK timeout\r\n"), // Partial data that will timeout
 	}
 	client := NewClient(conn, cfg)
 
