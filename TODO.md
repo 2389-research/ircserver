@@ -21,15 +21,15 @@
 
 ## Phase 4: Logging
 
--   [ ] Create a dedicated logging module
--   [ ] Log connect, disconnect, join, part, message events
--   [ ] Output to console and persist to SQLite
+-   [x] Create a dedicated logging module
+-   [x] Log connect, disconnect, join, part, message events
+-   [x] Output to console and persist to SQLite
 
 ## Phase 5: Web Interface
 
--   [ ] Serve a dashboard showing active users, channels, messages
+-   [x] Serve a dashboard showing active users, channels, messages
 -   [ ] Allow sending messages through the web
--   [ ] Optionally integrate basic real-time updates (polling or websockets)
+-   [x] Optionally integrate basic real-time updates (polling or websockets)
 
 ## Phase 6: Configuration
 
