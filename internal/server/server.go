@@ -493,16 +493,27 @@ func (s *Server) handlePrivMsg(client *Client, args string) {
 
 func (s *Server) handleNotice(client *Client, args string) {
 	parts := strings.SplitN(args, " ", 2)
-	if len(parts) < 2 {
+	if len(parts) < 2 || parts[0] == "" {
 		return // NOTICE doesn't send error replies
 	}
 
 	target := parts[0]
 	message := strings.TrimPrefix(parts[1], ":")
 
+	if message == "" {
+		return // NOTICE doesn't send error replies
+	}
+
 	s.logger.LogMessage(client, target, "NOTICE", message)
 
-	s.deliverMessage(client, target, "NOTICE", message)
+	// Handle multiple targets
+	targets := strings.Split(target, ",")
+	for _, t := range targets {
+		t = strings.TrimSpace(t)
+		if t != "" {
+			s.deliverMessage(client, t, "NOTICE", message)
+		}
+	}
 }
 
 func (s *Server) handlePing(client *Client, args string) {
@@ -618,13 +629,14 @@ func (s *Server) deliverMessage(from *Client, target, msgType, message string) {
 	if s.webServer != nil {
 		s.webServer.AddMessage(from.String(), target, msgType, message)
 	}
-	s.mu.RUnlock()
+
+	formattedMsg := fmt.Sprintf(":%s %s %s :%s\r\n", from, msgType, target, message)
 
 	if strings.HasPrefix(target, "#") {
 		s.mu.RLock()
 		if _, exists := s.channels[target]; exists {
 			s.mu.RUnlock()
-			if err := s.broadcastToChannel(target, fmt.Sprintf(":%s %s %s :%s", from, msgType, target, message)); err != nil {
+			if err := s.broadcastToChannel(target, formattedMsg); err != nil {
 				log.Printf("ERROR: Failed to broadcast channel message: %v", err)
 			}
 		} else {
@@ -637,7 +649,7 @@ func (s *Server) deliverMessage(from *Client, target, msgType, message string) {
 		s.mu.RLock()
 		if to, exists := s.clients[target]; exists {
 			s.mu.RUnlock()
-			if err := to.Send(fmt.Sprintf(":%s %s %s :%s", from, msgType, target, message)); err != nil {
+			if err := to.Send(formattedMsg); err != nil {
 				log.Printf("ERROR: Failed to deliver message to %s: %v", target, err)
 			}
 		} else {
