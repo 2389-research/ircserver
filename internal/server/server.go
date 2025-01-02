@@ -9,7 +9,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-	"unicode"
 
 	"ircserver/internal/config"
 	"ircserver/internal/persistence"

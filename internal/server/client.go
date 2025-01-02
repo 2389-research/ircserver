@@ -8,7 +8,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-	"unicode"
 
 	"ircserver/internal/config"
 )
