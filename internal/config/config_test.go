@@ -83,8 +83,8 @@ func TestDefaultValues(t *testing.T) {
 	if cfg.IRC.ReadTimeout != 300*time.Second {
 		t.Errorf("Expected default read timeout 300s, got %v", cfg.IRC.ReadTimeout)
 	}
-	if cfg.IRC.WriteTimeout != 60*time.Second {
-		t.Errorf("Expected default write timeout 60s, got %v", cfg.IRC.WriteTimeout)
+	if cfg.IRC.WriteTimeout != 180*time.Second {
+		t.Errorf("Expected default write timeout 180s, got %v", cfg.IRC.WriteTimeout)
 	}
 	if cfg.IRC.MaxBufferSize != 4096 {
 		t.Errorf("Expected default max buffer size 4096, got %d", cfg.IRC.MaxBufferSize)
