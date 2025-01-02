@@ -477,7 +477,6 @@ func (s *Server) handlePrivMsg(client *Client, args string) {
 			}
 			continue
 		}
-		ctx := context.Background()
 		s.logger.LogMessage(client, t, "PRIVMSG", message)
 		s.deliverMessage(client, t, "PRIVMSG", message)
 	}
