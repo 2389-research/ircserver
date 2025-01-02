@@ -168,14 +168,6 @@ func (c *Client) handleConnection() error {
 	}
 }
 
-func isValidNick(nick string) bool {
-	for _, r := range nick {
-		if !unicode.IsLetter(r) && !unicode.IsNumber(r) && r != '-' && r != '_' {
-			return false
-		}
-	}
-	return true
-}
 
 // String returns a string representation of the client
 func (c *Client) String() string {
