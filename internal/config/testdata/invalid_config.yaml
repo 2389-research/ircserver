@@ -1,2 +1,3 @@
 server:
-  name: [invalid yaml
+  name: [invalid, yaml, syntax
+  host: {missing: closing brace
