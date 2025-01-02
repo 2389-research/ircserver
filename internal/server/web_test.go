@@ -9,14 +9,18 @@ import (
 	"testing"
 )
 
-func setupTestWebServer() *WebServer {
+func setupTestWebServer(t *testing.T) *WebServer {
 	ircServer := New("localhost", "6667", nil, nil)
-	ws, _ := NewWebServer(ircServer)
+	ws := &WebServer{
+		ircServer: ircServer,
+		messages:  make([]MessageInfo, 0),
+	}
+	ircServer.SetWebServer(ws)
 	return ws
 }
 
 func TestDashboardDataRetrieval(t *testing.T) {
-	ws := setupTestWebServer()
+	ws := setupTestWebServer(t)
 
 	req, err := http.NewRequest("GET", "/api/data", nil)
 	if err != nil {
