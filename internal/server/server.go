@@ -231,7 +231,9 @@ func (s *Server) handleNick(client *Client, args string) error {
 
 	// Check if nickname is already in use
 	if _, exists := s.clients[newNick]; exists {
-		client.Send(":server 433 * " + newNick + " :Nickname is already in use")
+		if err := client.Send(":server 433 * " + newNick + " :Nickname is already in use"); err != nil {
+			log.Printf("ERROR: Failed to send nickname in use error: %v", err)
+		}
 		return fmt.Errorf("nickname %s already in use", newNick)
 	}
 
@@ -242,14 +244,18 @@ func (s *Server) handleNick(client *Client, args string) error {
 
 	client.nick = newNick
 	s.clients[newNick] = client
-	client.Send(fmt.Sprintf(":%s NICK %s", client, newNick))
+	if err := client.Send(fmt.Sprintf(":%s NICK %s", client, newNick)); err != nil {
+		log.Printf("ERROR: Failed to send nick change confirmation: %v", err)
+	}
 	return nil
 }
 
 func (s *Server) handleUser(client *Client, args string) {
 	parts := strings.SplitN(args, " ", 4)
 	if len(parts) < 4 {
-		client.Send(":server 461 USER :Not enough parameters")
+		if err := client.Send(":server 461 USER :Not enough parameters"); err != nil {
+			log.Printf("ERROR: Failed to send parameters error: %v", err)
+		}
 		return
 	}
 
