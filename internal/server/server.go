@@ -103,6 +103,8 @@ func (s *Server) handleMessage(client *Client, message string) {
 		s.handleNotice(client, args)
 	case "PING":
 		s.handlePing(client, args)
+	case "WHO":
+		s.handleWho(client, args)
 	default:
 		log.Printf("WARN: Unknown command from %s: %s", client, command)
 	}
@@ -253,6 +255,44 @@ func (s *Server) handleNotice(client *Client, args string) {
 
 func (s *Server) handlePing(client *Client, args string) {
 	client.Send(fmt.Sprintf("PONG :%s", args))
+}
+
+func (s *Server) handleWho(client *Client, args string) {
+	target := strings.TrimSpace(args)
+	if target == "" {
+		client.Send(":server 461 WHO :Not enough parameters")
+		return
+	}
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if strings.HasPrefix(target, "#") {
+		// WHO for channel
+		channel, exists := s.channels[target]
+		if !exists {
+			client.Send(fmt.Sprintf(":server 403 %s %s :No such channel", client.nick, target))
+			return
+		}
+
+		for _, member := range channel.GetClients() {
+			// <channel> <username> <host> <server> <nick> <H|G>[*][@|+] :<hopcount> <real name>
+			client.Send(fmt.Sprintf(":server 352 %s %s %s %s server %s H :0 %s",
+				client.nick, target, member.username,
+				member.conn.RemoteAddr().String(),
+				member.nick, member.realname))
+		}
+	} else {
+		// WHO for user
+		if targetClient, exists := s.clients[target]; exists {
+			client.Send(fmt.Sprintf(":server 352 %s * %s %s server %s H :0 %s",
+				client.nick, targetClient.username,
+				targetClient.conn.RemoteAddr().String(),
+				targetClient.nick, targetClient.realname))
+		}
+	}
+
+	client.Send(fmt.Sprintf(":server 315 %s %s :End of WHO list", client.nick, target))
 }
 
 func (s *Server) deliverMessage(from *Client, target, msgType, message string) {
