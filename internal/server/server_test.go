@@ -61,9 +61,7 @@ func TestChannelOperations(t *testing.T) {
 				if len(srv.channels) != 1 {
 					t.Errorf("Expected 1 channel, got %d", len(srv.channels))
 				}
-				members := srv.channels[tt.channel].GetMembers()
-				_, exists := members["user1"]
-				if !exists {
+				if member := srv.channels[tt.channel].GetMembers()["user1"]; member == nil {
 					t.Error("Expected user1 to be in channel")
 				}
 			} else {
