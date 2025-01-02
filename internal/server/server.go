@@ -139,7 +139,7 @@ func (s *Server) handleUser(client *Client, args string) {
 
 	client.username = parts[0]
 	client.realname = strings.TrimPrefix(parts[3], ":")
-	
+
 	// Send welcome messages
 	client.Send(fmt.Sprintf(":server 001 %s :Welcome to the IRC Network %s!%s@%s",
 		client.nick, client.nick, client.username, client.conn.RemoteAddr().String()))
@@ -229,7 +229,7 @@ func (s *Server) handlePing(client *Client, args string) {
 func (s *Server) deliverMessage(from *Client, target, msgType, message string) {
 	if strings.HasPrefix(target, "#") {
 		s.mu.RLock()
-		if channel, exists := s.channels[target]; exists {
+		if _, exists := s.channels[target]; exists {
 			s.mu.RUnlock()
 			s.broadcastToChannel(target, fmt.Sprintf(":%s %s %s :%s", from, msgType, target, message))
 		} else {
