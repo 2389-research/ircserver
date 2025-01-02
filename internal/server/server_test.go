@@ -21,10 +21,9 @@ func (m *mockStore) UpdateUser(ctx context.Context, nickname, username, realname
 func (m *mockStore) UpdateChannel(ctx context.Context, name, topic string) error { return nil }
 
 func TestChannelOperations(t *testing.T) {
+	cfg := config.DefaultConfig()
 	store := &mockStore{}
 	srv := New("localhost", "0", store, cfg)
-	
-	cfg := config.DefaultConfig()
 	
 	// Create test clients
 	client1 := NewClient(&mockConn{readData: strings.NewReader("")}, cfg)
@@ -64,6 +63,7 @@ func TestChannelOperations(t *testing.T) {
 }
 
 func TestServerAcceptsConnections(t *testing.T) {
+	cfg := config.DefaultConfig()
 	store := &mockStore{}
 	srv := New("localhost", "6668", store, cfg)
 
