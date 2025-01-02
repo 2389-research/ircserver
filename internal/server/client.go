@@ -53,14 +53,23 @@ func (c *Client) Send(message string) error {
 	defer c.mu.Unlock()
 
 	var err error
-	for retries := c.config.IRC.MaxRetries; retries > 0; retries-- {
+	maxRetries := 3
+	if c.config.IRC.MaxRetries > 0 {
+		maxRetries = c.config.IRC.MaxRetries
+	}
+	retryDelay := time.Second
+	if c.config.IRC.RetryDelay > 0 {
+		retryDelay = c.config.IRC.RetryDelay
+	}
+
+	for retries := maxRetries; retries > 0; retries-- {
 		_, err = c.writer.WriteString(message + "\r\n")
 		if err == nil {
 			log.Printf("DEBUG: Sent to client %s: %s", c.String(), message)
 			return c.writer.Flush()
 		}
 		log.Printf("ERROR: Failed to send message to client %s: %v", c.String(), err)
-		time.Sleep(c.config.IRC.RetryDelay)
+		time.Sleep(retryDelay)
 	}
 	return err
 }
