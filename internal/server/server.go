@@ -184,8 +184,8 @@ func (s *Server) handlePart(client *Client, args string) {
 	}
 
 	channels := strings.Split(args, ",")
-	for _, channel := range channels {
-		channelName := strings.TrimSpace(channel)
+	for _, channelName := range channels {
+		channelName = strings.TrimSpace(channelName)
 		s.mu.Lock()
 		if s.channels[channelName] != nil {
 			delete(s.channels[channelName], client.nick)
