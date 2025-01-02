@@ -136,7 +136,11 @@ func (c *Client) handleConnection() error {
 		}
 		
 		// Unknown command
-		log.Printf("WARN: Unknown command from %s: %s", c.String(), strings.Split(line, " ")[0])
+		cmd := strings.Split(line, " ")[0]
+		log.Printf("WARN: Unknown command from %s: %s", c.String(), cmd)
+		if err := c.Send(fmt.Sprintf("421 %s %s :Unknown command", c.String(), cmd)); err != nil {
+			return err
+		}
 	}
 }
 

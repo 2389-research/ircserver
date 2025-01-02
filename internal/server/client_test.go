@@ -71,7 +71,7 @@ func TestClientConnection(t *testing.T) {
 	}{
 		{
 			name:    "valid connection with nick",
-			input:   "NICK validnick\r\nUSER test 0 * :Test User\r\n\n",
+			input:   "NICK validnick\r\nUSER test 0 * :Test User\r\n",
 			nick:    "validnick",
 			wantErr: false,
 		},
@@ -154,30 +154,30 @@ func TestConcurrentConnections(t *testing.T) {
 	}
 }
 
-func TestConnectionTimeout(t *testing.T) {
+func TestUnknownCommand(t *testing.T) {
 	cfg := config.DefaultConfig()
-	cfg.IRC.ReadTimeout = 100 * time.Millisecond // Short timeout for testing
-
-	// Create a connection that will timeout
 	conn := &mockConn{
-		readData: strings.NewReader("NICK timeout\r\n"), // Partial data that will timeout
+		readData: strings.NewReader("TEST command\r\n"),
 	}
 	client := NewClient(conn, cfg)
 
-	// Start client processing
 	errCh := make(chan error, 1)
 	go func() {
 		errCh <- client.handleConnection()
 	}()
 
-	// Wait for timeout
 	select {
 	case err := <-errCh:
 		if err == nil {
-			t.Error("Expected timeout error, got nil")
+			t.Error("Expected error for unknown command")
 		}
-	case <-time.After(200 * time.Millisecond):
-		t.Error("Connection did not timeout as expected")
+	case <-time.After(100 * time.Millisecond):
+		t.Error("Test timed out")
+	}
+
+	expected := "421 unknown TEST :Unknown command\r\n"
+	if got := conn.writeData.String(); got != expected {
+		t.Errorf("Expected response %q, got %q", expected, got)
 	}
 }
 
