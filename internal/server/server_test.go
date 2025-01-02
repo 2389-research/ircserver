@@ -207,15 +207,15 @@ func TestPrivMsgToChannel(t *testing.T) {
 	recipient2 := newTestClient("charlie", cfg)
 	
 	channelName := "#test"
-	// Register clients with server
-	s.clients[sender.nick] = sender.Client
-	s.clients[recipient1.nick] = recipient1.Client
-	s.clients[recipient2.nick] = recipient2.Client
+	// Register clients with server and ensure Send method is properly overridden
+	s.clients[sender.nick] = sender
+	s.clients[recipient1.nick] = recipient1
+	s.clients[recipient2.nick] = recipient2
 
 	s.channels[channelName] = &Channel{
 		Name:    channelName,
 		Clients: map[string]*Client{
-			sender.nick:     sender.Client,
+			sender.nick:     &Client{conn: sender.conn, nick: sender.nick, writer: sender.writer},
 			recipient1.nick: recipient1.Client,
 			recipient2.nick: recipient2.Client,
 		},
