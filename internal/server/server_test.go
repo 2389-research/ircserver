@@ -179,7 +179,7 @@ func TestPrivMsgToUser(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			recipient.messages = nil // Clear previous messages
 			
-			err := s.handleMessage(context.Background(), sender, tt.message)
+			err := s.handleMessage(context.Background(), sender.Client, tt.message)
 			if err != nil {
 				t.Errorf("handleMessage() error = %v", err)
 				return
@@ -201,9 +201,10 @@ func TestPrivMsgToChannel(t *testing.T) {
 	s := setupTestServer()
 	
 	// Setup clients and channel
-	sender := newMockClient("alice")
-	recipient1 := newMockClient("bob")
-	recipient2 := newMockClient("charlie")
+	cfg := config.DefaultConfig()
+	sender := newTestClient("alice", cfg)
+	recipient1 := newTestClient("bob", cfg)
+	recipient2 := newTestClient("charlie", cfg)
 	
 	channelName := "#test"
 	s.channels[channelName] = &Channel{
@@ -240,14 +241,15 @@ func TestPrivMsgToChannel(t *testing.T) {
 func TestNoticeHandling(t *testing.T) {
 	s := setupTestServer()
 	
-	sender := newMockClient("alice")
-	recipient := newMockClient("bob")
+	cfg := config.DefaultConfig()
+	sender := newTestClient("alice", cfg)
+	recipient := newTestClient("bob", cfg)
 	
-	s.clients[sender.GetNick()] = sender
-	s.clients[recipient.GetNick()] = recipient
+	s.clients[sender.nick] = sender.Client
+	s.clients[recipient.nick] = recipient.Client
 	
 	// Test NOTICE message
-	s.handleMessage(sender, "NOTICE bob :Server maintenance in 5 minutes")
+	s.handleMessage(context.Background(), sender.Client, "NOTICE bob :Server maintenance in 5 minutes")
 	
 	if len(recipient.messages) != 1 {
 		t.Errorf("Expected 1 message, got %d", len(recipient.messages))
@@ -262,17 +264,18 @@ func TestNoticeHandling(t *testing.T) {
 func TestMessageSizeLimits(t *testing.T) {
 	s := setupTestServer()
 	
-	sender := newMockClient("alice")
-	recipient := newMockClient("bob")
+	cfg := config.DefaultConfig()
+	sender := newTestClient("alice", cfg)
+	recipient := newTestClient("bob", cfg)
 	
-	s.clients[sender.GetNick()] = sender
-	s.clients[recipient.GetNick()] = recipient
+	s.clients[sender.nick] = sender.Client
+	s.clients[recipient.nick] = recipient.Client
 	
 	// Create message that exceeds 512 bytes (IRC protocol limit)
 	longMessage := "PRIVMSG bob :" + strings.Repeat("x", 500)
 	
 	// Test sending oversized message
-	s.handleMessage(sender, longMessage)
+	s.handleMessage(context.Background(), sender.Client, longMessage)
 	
 	// Verify recipient received nothing due to size limit
 	if len(recipient.messages) != 0 {
@@ -294,14 +297,15 @@ func TestInvalidMessageFormats(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			s := setupTestServer()
-			sender := newMockClient("alice")
-			recipient := newMockClient("bob")
+			cfg := config.DefaultConfig()
+			sender := newTestClient("alice", cfg)
+			recipient := newTestClient("bob", cfg)
 			
-			s.clients[sender.GetNick()] = sender
-			s.clients[recipient.GetNick()] = recipient
+			s.clients[sender.nick] = sender.Client
+			s.clients[recipient.nick] = recipient.Client
 			
 			// Test invalid message
-			s.handleMessage(sender, tt.message)
+			s.handleMessage(context.Background(), sender.Client, tt.message)
 			
 			// Verify no messages were sent
 			if len(recipient.messages) != 0 {
@@ -313,18 +317,20 @@ func TestInvalidMessageFormats(t *testing.T) {
 
 func BenchmarkChannelBroadcast(b *testing.B) {
 	s := setupTestServer()
-	sender := newMockClient("alice")
+	cfg := config.DefaultConfig()
+	sender := newTestClient("alice", cfg)
 	
 	// Create a channel with 100 users
 	channelName := "#test"
 	channel := &Channel{
-		name:    channelName,
-		clients: make(map[string]Client),
+		Name:    channelName,
+		Clients: make(map[string]*Client),
+		Created: time.Now(),
 	}
 	
 	for i := 0; i < 100; i++ {
-		client := newMockClient(fmt.Sprintf("user%d", i))
-		channel.clients[client.GetNick()] = client
+		client := newTestClient(fmt.Sprintf("user%d", i), cfg)
+		channel.Clients[client.nick] = client.Client
 	}
 	
 	s.channels[channelName] = channel
@@ -333,6 +339,6 @@ func BenchmarkChannelBroadcast(b *testing.B) {
 	
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		s.handleMessage(sender, message)
+		s.handleMessage(context.Background(), sender.Client, message)
 	}
 }
