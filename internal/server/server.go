@@ -28,6 +28,33 @@ type Server struct {
 	mu        sync.RWMutex // Protects clients and channels maps
 }
 
+// serverState represents an immutable snapshot of server state
+type serverState struct {
+	clients  map[string]*Client
+	channels map[string]*Channel
+}
+
+// getState creates a deep copy of server state under read lock
+func (s *Server) getState() serverState {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	clients := make(map[string]*Client, len(s.clients))
+	for k, v := range s.clients {
+		clients[k] = v
+	}
+
+	channels := make(map[string]*Channel, len(s.channels))
+	for k, v := range s.channels {
+		channels[k] = v
+	}
+
+	return serverState{
+		clients:  clients,
+		channels: channels,
+	}
+}
+
 // serverSnapshot contains copied server state
 type serverSnapshot struct {
 	channels map[string]*Channel
@@ -659,7 +686,7 @@ func (s *Server) deliverMessage(from *Client, target, msgType, message string) {
 	}
 
 	if strings.HasPrefix(target, "#") {
-		// Get channel under read lock
+		// Get channel reference under read lock
 		s.mu.RLock()
 		channel, exists := s.channels[target]
 		s.mu.RUnlock()

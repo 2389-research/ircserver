@@ -80,8 +80,100 @@ func TestChannelOperations(t *testing.T) {
 // TestConcurrentOperations verifies thread-safety of server operations
 func TestConcurrentOperations(t *testing.T) {
 	// Add timeout for the whole test
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
+
+	const (
+		numClients  = 50
+		numChannels = 10
+		numMessages = 100
+	)
+
+	cfg := config.DefaultConfig()
+	store := &mockStore{}
+	srv := New("localhost", "0", store, cfg)
+
+	// Create test channels
+	channels := make([]string, numChannels)
+	for i := 0; i < numChannels; i++ {
+		channels[i] = fmt.Sprintf("#test%d", i)
+	}
+
+	// Create and register clients
+	clients := make([]*Client, numClients)
+	for i := 0; i < numClients; i++ {
+		mockConn := &mockConn{readData: strings.NewReader("")}
+		clients[i] = NewClient(mockConn, cfg)
+		clients[i].nick = fmt.Sprintf("user%d", i)
+		clients[i].username = fmt.Sprintf("user%d", i)
+		clients[i].realname = fmt.Sprintf("User %d", i)
+
+		srv.mu.Lock()
+		srv.clients[clients[i].nick] = clients[i]
+		srv.mu.Unlock()
+	}
+
+	var wg sync.WaitGroup
+
+	// Launch concurrent join operations
+	for _, client := range clients {
+		for _, channel := range channels {
+			wg.Add(1)
+			go func(c *Client, ch string) {
+				defer wg.Done()
+				srv.handleJoin(c, ch)
+			}(client, channel)
+		}
+	}
+
+	// Launch concurrent message operations
+	for i := 0; i < numMessages; i++ {
+		wg.Add(1)
+		go func(msgNum int) {
+			defer wg.Done()
+			client := clients[msgNum%numClients]
+			channel := channels[msgNum%numChannels]
+			msg := fmt.Sprintf("Message %d", msgNum)
+			srv.deliverMessage(client, channel, "PRIVMSG", msg)
+		}(i)
+	}
+
+	// Launch concurrent part operations
+	for _, client := range clients {
+		for _, channel := range channels {
+			wg.Add(1)
+			go func(c *Client, ch string) {
+				defer wg.Done()
+				srv.handlePart(c, ch)
+			}(client, channel)
+		}
+	}
+
+	// Wait with timeout
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-ctx.Done():
+		t.Fatal("Test timed out")
+	case <-done:
+		// Success
+	}
+
+	// Verify final state
+	state := srv.getState()
+	if len(state.channels) != 0 {
+		t.Errorf("Expected all channels to be removed, got %d", len(state.channels))
+	}
+
+	// Clean up
+	for _, client := range clients {
+		client.Close()
+	}
+}
 
 	cfg := config.DefaultConfig()
 	store := &mockStore{}

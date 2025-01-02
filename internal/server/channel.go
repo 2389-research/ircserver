@@ -28,8 +28,44 @@ type Channel struct {
 	Created  time.Time
 	Members  map[string]*ChannelMember // Map of nickname -> member
 	modes    map[string]bool          // Channel modes
-	mu       sync.RWMutex
+	mu       sync.RWMutex             // Protects all mutable state
 	password string                   // Optional channel password
+}
+
+// channelState represents an immutable snapshot of channel state
+type channelState struct {
+	name     string
+	topic    string
+	members  map[string]*ChannelMember
+	modes    map[string]bool
+	password string
+}
+
+// getState creates a deep copy of channel state under read lock
+func (ch *Channel) getState() channelState {
+	ch.mu.RLock()
+	defer ch.mu.RUnlock()
+
+	members := make(map[string]*ChannelMember, len(ch.Members))
+	for k, v := range ch.Members {
+		members[k] = &ChannelMember{
+			Client: v.Client,
+			Mode:   v.Mode,
+		}
+	}
+
+	modes := make(map[string]bool, len(ch.modes))
+	for k, v := range ch.modes {
+		modes[k] = v
+	}
+
+	return channelState{
+		name:     ch.Name,
+		topic:    ch.Topic,
+		members:  members,
+		modes:    modes,
+		password: ch.password,
+	}
 }
 
 // channelSnapshot represents an immutable copy of channel state
