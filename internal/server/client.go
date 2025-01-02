@@ -4,8 +4,10 @@ import (
 	"bufio"
 	"log"
 	"net"
+	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"ircserver/internal/config"
 )

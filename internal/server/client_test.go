@@ -7,7 +7,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-	"unicode"
 )
 
 // mockConn implements net.Conn interface for testing
