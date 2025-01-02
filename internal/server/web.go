@@ -133,6 +133,12 @@ func (ws *WebServer) handleAPISend(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
+// Shutdown gracefully shuts down the web server
+func (ws *WebServer) Shutdown() error {
+	// TODO: Implement proper shutdown with context and timeout
+	return nil
+}
+
 func (ws *WebServer) collectDashboardData() DashboardData {
 	data := DashboardData{
 		Users:    make([]UserInfo, 0),
