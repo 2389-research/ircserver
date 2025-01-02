@@ -64,16 +64,20 @@ func TestClientSend(t *testing.T) {
 
 func TestClientConnection(t *testing.T) {
 	tests := []struct {
-		name    string
-		input   string
-		nick    string
-		wantErr bool
+		name              string
+		input             string
+		nick              string
+		wantErr           bool
+		expectedResponses []string
 	}{
 		{
 			name:    "valid connection with nick",
 			input:   "NICK validnick\r\nUSER test 0 * :Test User\r\n",
 			nick:    "validnick",
 			wantErr: false,
+			expectedResponses: []string{
+				":* NICK validnick\r\n",
+			},
 		},
 		{
 			name:    "invalid nick character",
@@ -121,8 +125,18 @@ func TestClientConnection(t *testing.T) {
 				t.Error("handleConnection() timeout")
 			}
 
-			if !tt.wantErr && client.nick != tt.nick {
-				t.Errorf("Expected nickname %q, got %q", tt.nick, client.nick)
+			if !tt.wantErr {
+				if client.nick != tt.nick {
+					t.Errorf("Expected nickname %q, got %q", tt.nick, client.nick)
+				}
+				
+				// Verify expected responses
+				output := conn.writeData.String()
+				for _, expected := range tt.expectedResponses {
+					if !strings.Contains(output, expected) {
+						t.Errorf("Expected response %q not found in output: %q", expected, output)
+					}
+				}
 			}
 		})
 	}

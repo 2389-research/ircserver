@@ -118,13 +118,28 @@ func (c *Client) handleConnection() error {
 		
 		if strings.HasPrefix(line, "NICK ") {
 			nick := strings.TrimPrefix(line, "NICK ")
+			nick = strings.TrimSpace(nick)
 			if nick == "" {
-				return &IRCError{Code: "431", Message: "No nickname given"}
+				if err := c.Send("431 * :No nickname given"); err != nil {
+					return err
+				}
+				continue
 			}
 			if !isValidNick(nick) {
-				return &IRCError{Code: "432", Message: "Erroneous nickname"}
+				if err := c.Send("432 * :Erroneous nickname"); err != nil {
+					return err
+				}
+				continue
 			}
+			oldNick := c.nick
 			c.nick = nick
+			if oldNick == "" {
+				oldNick = "*"
+			}
+			if err := c.Send(fmt.Sprintf(":%s NICK %s", oldNick, nick)); err != nil {
+				return err
+			}
+			continue
 		}
 		
 		if strings.HasPrefix(line, "USER ") {
