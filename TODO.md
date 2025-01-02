@@ -15,9 +15,9 @@
 
 ## Phase 3: Persistence
 
--   [ ] Integrate SQLite for storing users, channels, and logs
--   [ ] Implement database schema creation
--   [ ] Store user/channel data and log messages (timestamp, sender, recipient, content)
+-   [x] Integrate SQLite for storing users, channels, and logs
+-   [x] Implement database schema creation
+-   [x] Store user/channel data and log messages (timestamp, sender, recipient, content)
 
 ## Phase 4: Logging
 

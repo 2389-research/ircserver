@@ -7,6 +7,8 @@ import (
 	"net"
 	"strings"
 	"sync"
+
+	"ircserver/internal/persistence"
 )
 
 // Server represents an IRC server instance
@@ -15,16 +17,18 @@ type Server struct {
 	port     string
 	clients  map[string]*Client
 	channels map[string]*Channel
+	store    *persistence.Store
 	mu       sync.RWMutex
 }
 
 // New creates a new IRC server instance
-func New(host, port string) *Server {
+func New(host, port string, store *persistence.Store) *Server {
 	return &Server{
 		host:     host,
 		port:     port,
 		clients:  make(map[string]*Client),
 		channels: make(map[string]*Channel),
+		store:    store,
 	}
 }
 
