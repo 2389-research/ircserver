@@ -170,7 +170,6 @@ func TestConcurrentOperations(t *testing.T) {
 	}()
 
 	timeout := time.After(5 * time.Second)
-	}()
 
 	select {
 	case <-timeout:
