@@ -85,7 +85,9 @@ func TestConcurrentWebRequests(t *testing.T) {
 			defer wg.Done()
 			req, err := http.NewRequest("GET", "/api/data", nil)
 			if err != nil {
-				t.Fatal(err)
+				t.Errorf("failed to create request: %v", err)
+				return
+			}
 			}
 
 			rr := httptest.NewRecorder()
