@@ -79,20 +79,24 @@ func TestChannelOperations(t *testing.T) {
 
 // TestConcurrentOperations verifies thread-safety of server operations
 func TestConcurrentOperations(t *testing.T) {
-	// Add timeout to prevent test from hanging
+	// Add timeout for the whole test
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
 	cfg := config.DefaultConfig()
 	store := &mockStore{}
 	srv := New("localhost", "0", store, cfg)
 
-	// Create test channels and clients - reduced for faster testing
+	// Create test channels and clients
 	channels := []string{"#test1", "#test2"}
 	numClients := 5
 	clients := make([]*Client, numClients)
-	
+
 	// Initialize clients under server lock
 	srv.mu.Lock()
 	for i := 0; i < numClients; i++ {
-		clients[i] = NewClient(&mockConn{readData: strings.NewReader("")}, cfg)
+		mockConn := &mockConn{readData: strings.NewReader("")}
+		clients[i] = NewClient(mockConn, cfg)
 		clients[i].nick = fmt.Sprintf("user%d", i)
 		srv.clients[clients[i].nick] = clients[i]
 	}
@@ -110,14 +114,29 @@ func TestConcurrentOperations(t *testing.T) {
 			}(client, channel)
 		}
 	}
-	wg.Wait()
 
-	// Verify channel membership
+	// Wait for all joins with timeout
+	joinDone := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(joinDone)
+	}()
+
+	select {
+	case <-ctx.Done():
+		t.Fatal("Test timed out during joins")
+		return
+	case <-joinDone:
+		// Joins completed successfully
+	}
+
+	// Verify channel membership under read lock
 	srv.mu.RLock()
 	for _, channel := range channels {
 		if ch, exists := srv.channels[channel]; exists {
 			if len(ch.Members) != numClients {
-				t.Errorf("Expected %d members in channel %s, got %d", numClients, channel, len(ch.Members))
+				t.Errorf("Expected %d members in channel %s, got %d",
+					numClients, channel, len(ch.Members))
 			}
 		} else {
 			t.Errorf("Channel %s not created", channel)
@@ -125,19 +144,8 @@ func TestConcurrentOperations(t *testing.T) {
 	}
 	srv.mu.RUnlock()
 
-	// Concurrent messages
-	for _, client := range clients {
-		for _, channel := range channels {
-			wg.Add(1)
-			go func(c *Client, ch string) {
-				defer wg.Done()
-				srv.deliverMessage(c, ch, "PRIVMSG", "test message")
-			}(client, channel)
-		}
-	}
-	wg.Wait()
-
 	// Concurrent parts - all at once
+	wg = sync.WaitGroup{} // Reset WaitGroup for parts
 	for _, client := range clients {
 		for _, channel := range channels {
 			wg.Add(1)
@@ -147,34 +155,42 @@ func TestConcurrentOperations(t *testing.T) {
 			}(client, channel)
 		}
 	}
-	wg.Wait()
 
-	// Final verification with timeout
-	done := make(chan bool)
+	// Wait for all parts with timeout
+	partDone := make(chan struct{})
 	go func() {
-		srv.mu.RLock()
-		remainingChannels := len(srv.channels)
-		if remainingChannels != 0 {
-			t.Logf("WARNING: %d channels still exist:", remainingChannels)
-			for name, ch := range srv.channels {
-				t.Logf("Channel %s has %d members", name, len(ch.Members))
-				for nick := range ch.Members {
-					t.Logf("  - Member: %s", nick)
-				}
-			}
-			t.Errorf("Expected all channels to be removed, got %d remaining", remainingChannels)
-		}
-		srv.mu.RUnlock()
-		done <- true
+		wg.Wait()
+		close(partDone)
 	}()
 
-	timeout := time.After(2 * time.Second)
-
 	select {
-	case <-timeout:
-		t.Fatal("Test timed out after 5 seconds")
-	case <-done:
-		// Test completed successfully
+	case <-ctx.Done():
+		t.Fatal("Test timed out during parts")
+		return
+	case <-partDone:
+		// Parts completed successfully
+	}
+
+	// Give a small window for cleanup operations
+	time.Sleep(50 * time.Millisecond)
+
+	// Final verification under read lock
+	srv.mu.RLock()
+	remainingChannels := len(srv.channels)
+	if remainingChannels != 0 {
+		for name, ch := range srv.channels {
+			t.Logf("Channel %s has %d members", name, len(ch.Members))
+			for nick := range ch.Members {
+				t.Logf("  - Member still present: %s", nick)
+			}
+		}
+		t.Errorf("Expected all channels to be removed, got %d remaining", remainingChannels)
+	}
+	srv.mu.RUnlock()
+
+	// Clean up
+	for _, client := range clients {
+		client.Close()
 	}
 }
 

@@ -12,19 +12,20 @@ import (
 	"sync"
 	"time"
 )
+
 // Server represents an IRC server instance.
 type Server struct {
 	host      string
 	port      string
-	clients   map[string]*Client      // Protected by mu
-	channels  map[string]*Channel     // Protected by mu
+	clients   map[string]*Client  // Protected by mu
+	channels  map[string]*Channel // Protected by mu
 	store     persistence.Store
 	logger    *Logger
 	webServer *WebServer
 	config    *config.Config
 	listener  net.Listener
 	shutdown  chan struct{}
-	mu        sync.RWMutex           // Protects clients and channels maps
+	mu        sync.RWMutex // Protects clients and channels maps
 }
 
 // serverSnapshot contains copied server state
@@ -42,7 +43,7 @@ func (s *Server) snapshot() serverSnapshot {
 	for k, v := range s.channels {
 		channels[k] = v
 	}
-	
+
 	clients := make(map[string]*Client, len(s.clients))
 	for k, v := range s.clients {
 		clients[k] = v
@@ -424,60 +425,55 @@ func (s *Server) handlePart(client *Client, args string) {
 	channels := strings.Split(args, ",")
 	for _, channelName := range channels {
 		channelName = strings.TrimSpace(channelName)
-		
-		s.mu.Lock()
+
+		// Get channel under read lock first
+		s.mu.RLock()
 		channel, exists := s.channels[channelName]
+		s.mu.RUnlock()
+
 		if !exists {
-			s.mu.Unlock()
 			if err := client.Send(fmt.Sprintf(":server 403 %s %s :No such channel", client.nick, channelName)); err != nil {
 				log.Printf("ERROR: Failed to send no such channel error: %v", err)
 			}
 			continue
 		}
 
-		// Check if client is actually in the channel
+		// Check if client is in channel
 		if !channel.HasMember(client.nick) {
-			s.mu.Unlock()
 			if err := client.Send(fmt.Sprintf(":server 442 %s %s :You're not on that channel", client.nick, channelName)); err != nil {
 				log.Printf("ERROR: Failed to send not on channel error: %v", err)
 			}
 			continue
 		}
 
-		// Check if client is actually in the channel
-		if !channel.HasMember(client.nick) {
-			s.mu.Unlock()
-			if err := client.Send(fmt.Sprintf(":server 442 %s %s :You're not on that channel", client.nick, channelName)); err != nil {
-				log.Printf("ERROR: Failed to send not on channel error: %v", err)
-			}
-			continue
-		}
-
-		// Send PART message to all clients in the channel (including the leaving client)
+		// Send PART message before removing from channel
 		partMsg := fmt.Sprintf(":%s PART %s", client, channelName)
 		if err := s.broadcastToChannel(channelName, partMsg); err != nil {
 			log.Printf("ERROR: Failed to broadcast PART message: %v", err)
 		}
 
-		// Remove client from channel
-		channel.RemoveClient(client.nick)
-		delete(client.channels, channelName)
+		// Now take the write lock to modify channel state
+		s.mu.Lock()
+		if ch, stillExists := s.channels[channelName]; stillExists {
+			ch.RemoveClient(client.nick)
+			delete(client.channels, channelName)
+
+			// Check if channel is empty and remove it if so
+			if ch.IsEmpty() {
+				delete(s.channels, channelName)
+				ctx := context.Background()
+				if err := s.logger.LogEvent(ctx, EventChannelDelete, client, channelName, "Channel removed - last user left"); err != nil {
+					log.Printf("ERROR: Failed to log channel deletion: %v", err)
+				}
+			}
+		}
+		s.mu.Unlock()
 
 		// Log the PART event
 		ctx := context.Background()
 		if err := s.logger.LogEvent(ctx, EventPart, client, channelName, ""); err != nil {
 			log.Printf("ERROR: Failed to log part event: %v", err)
 		}
-
-		// Check if channel is now empty after removing the client
-		if channel.IsEmpty() {
-			delete(s.channels, channelName)
-			if err := s.logger.LogEvent(ctx, EventChannelDelete, client, channelName, "Channel removed - last user left"); err != nil {
-				log.Printf("ERROR: Failed to log channel deletion: %v", err)
-			}
-		}
-		
-		s.mu.Unlock()
 	}
 }
 
@@ -580,7 +576,7 @@ func (s *Server) handleTopic(client *Client, args string) {
 			}
 		} else {
 			if err := client.Send(fmt.Sprintf(":server 332 %s %s :%s", client.nick, channelName, topic)); err != nil {
-				log.Printf("ERROR: Failed to send topic message: %v", err) 
+				log.Printf("ERROR: Failed to send topic message: %v", err)
 			}
 		}
 		return
@@ -641,7 +637,7 @@ func (s *Server) handleWho(client *Client, args string) {
 				client.nick, targetClient.username,
 				targetClient.conn.RemoteAddr().String(),
 				targetClient.nick, targetClient.realname)); err != nil {
-				log.Printf("ERROR: Failed to send WHO response: %v", err) 
+				log.Printf("ERROR: Failed to send WHO response: %v", err)
 			}
 		}
 	}
@@ -675,10 +671,10 @@ func (s *Server) deliverMessage(from *Client, target, msgType, message string) {
 			}
 			return
 		}
-		
+
 		// Take snapshot of channel members
 		snapshot := channel.snapshot()
-		
+
 		// Send to all clients in channel except sender
 		for _, member := range snapshot.members {
 			client := member.Client
@@ -706,20 +702,20 @@ func (s *Server) deliverMessage(from *Client, target, msgType, message string) {
 }
 
 func (s *Server) broadcastToChannel(channelName string, message string) error {
+	// Get channel under read lock
 	s.mu.RLock()
-	defer s.mu.RUnlock()
-
 	channel, exists := s.channels[channelName]
+	s.mu.RUnlock()
+
 	if !exists {
 		return fmt.Errorf("channel %s does not exist", channelName)
 	}
 
-	channel.mu.RLock()
-	defer channel.mu.RUnlock()
+	// Take snapshot of channel members
+	snapshot := channel.snapshot()
 
 	var firstErr error
-	members := channel.GetMembers()
-	for _, member := range members {
+	for _, member := range snapshot.members {
 		client := member.Client
 		if client.nick != message {
 			if err := client.Send(message); err != nil {
