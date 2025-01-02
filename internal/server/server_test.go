@@ -5,10 +5,33 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"ircserver/internal/config"
 	"ircserver/internal/persistence"
 )
+
+// mockClient implements a test client
+type mockClient struct {
+	nick     string
+	messages []string
+}
+
+func (m *mockClient) Send(msg string) error {
+	m.messages = append(m.messages, msg)
+	return nil
+}
+
+func (m *mockClient) GetNick() string {
+	return m.nick
+}
+
+func newMockClient(nick string) *mockClient {
+	return &mockClient{
+		nick:     nick,
+		messages: make([]string, 0),
+	}
+}
 
 // mockStore implements persistence.Store interface for testing.
 type mockStore struct{}
@@ -120,38 +143,10 @@ func TestChannelMultiUserOperations(t *testing.T) {
 		t.Error("Expected channel to be removed after last user left")
 	}
 }
-package server
-
-import (
-	"fmt"
-	"strings"
-	"testing"
-	"time"
-)
-
-type mockClient struct {
-	nick     string
-	messages []string
-}
-
-func (m *mockClient) Send(msg string) error {
-	m.messages = append(m.messages, msg)
-	return nil
-}
-
-func (m *mockClient) GetNick() string {
-	return m.nick
-}
-
-func newMockClient(nick string) *mockClient {
-	return &mockClient{
-		nick:     nick,
-		messages: make([]string, 0),
-	}
-}
-
 func setupTestServer() *Server {
-	return NewServer()
+	cfg := config.DefaultConfig()
+	store := &mockStore{}
+	return New("localhost", "0", store, cfg)
 }
 
 func TestPrivMsgToUser(t *testing.T) {
@@ -164,16 +159,42 @@ func TestPrivMsgToUser(t *testing.T) {
 	s.clients[sender.GetNick()] = sender
 	s.clients[recipient.GetNick()] = recipient
 	
-	// Test sending private message
-	s.handleMessage(sender, "PRIVMSG bob :Hello there!")
-	
-	if len(recipient.messages) != 1 {
-		t.Errorf("Expected 1 message, got %d", len(recipient.messages))
+	tests := []struct {
+		name     string
+		message  string
+		expected string
+	}{
+		{
+			name:     "basic message",
+			message:  "PRIVMSG bob :Hello there!",
+			expected: ":alice PRIVMSG bob :Hello there!",
+		},
+		{
+			name:     "multi-word message",
+			message:  "PRIVMSG bob :Hello there, how are you?",
+			expected: ":alice PRIVMSG bob :Hello there, how are you?",
+		},
 	}
-	
-	expected := ":alice PRIVMSG bob :Hello there!"
-	if recipient.messages[0] != expected {
-		t.Errorf("Expected message '%s', got '%s'", expected, recipient.messages[0])
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			recipient.messages = nil // Clear previous messages
+			
+			err := s.handleMessage(context.Background(), sender, tt.message)
+			if err != nil {
+				t.Errorf("handleMessage() error = %v", err)
+				return
+			}
+			
+			if len(recipient.messages) != 1 {
+				t.Errorf("Expected 1 message, got %d", len(recipient.messages))
+				return
+			}
+			
+			if recipient.messages[0] != tt.expected {
+				t.Errorf("Expected message '%s', got '%s'", tt.expected, recipient.messages[0])
+			}
+		})
 	}
 }
 
