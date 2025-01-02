@@ -621,7 +621,6 @@ func (s *Server) deliverMessage(from *Client, target, msgType, message string) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	ctx := context.Background()
 	s.logger.LogMessage(from, target, msgType, message)
 
 	// Track message in web interface if available
