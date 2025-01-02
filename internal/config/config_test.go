@@ -56,8 +56,8 @@ func TestInvalidConfigHandling(t *testing.T) {
 func TestDefaultValues(t *testing.T) {
 	cfg := DefaultConfig()
 
-	if cfg.Server.Name != "IRC Server" {
-		t.Errorf("Expected default server name 'IRC Server', got '%s'", cfg.Server.Name)
+	if cfg.Server.Name != "My IRC Server" {
+		t.Errorf("Expected default server name 'My IRC Server', got '%s'", cfg.Server.Name)
 	}
 	if cfg.Server.Host != "localhost" {
 		t.Errorf("Expected default server host 'localhost', got '%s'", cfg.Server.Host)
