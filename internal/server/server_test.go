@@ -78,73 +78,88 @@ func TestChannelOperations(t *testing.T) {
 
 // TestConcurrentOperations verifies thread-safety of server operations
 func TestConcurrentOperations(t *testing.T) {
-	cfg := config.DefaultConfig()
-	store := &mockStore{}
-	srv := New("localhost", "0", store, cfg)
+	// Add timeout to prevent test from hanging
+	timeout := time.After(5 * time.Second)
+	done := make(chan bool)
 
-	// Create test channels and clients
-	channels := []string{"#test1", "#test2", "#test3"}
-	numClients := 10
-	clients := make([]*Client, numClients)
-	
-	for i := 0; i < numClients; i++ {
-		clients[i] = NewClient(&mockConn{readData: strings.NewReader("")}, cfg)
-		clients[i].nick = fmt.Sprintf("user%d", i)
-		srv.clients[clients[i].nick] = clients[i]
-	}
+	go func() {
+		cfg := config.DefaultConfig()
+		store := &mockStore{}
+		srv := New("localhost", "0", store, cfg)
 
-	var wg sync.WaitGroup
-	
-	// Concurrent joins
-	wg.Add(numClients * len(channels))
-	for _, client := range clients {
-		for _, channel := range channels {
-			go func(c *Client, ch string) {
-				defer wg.Done()
-				srv.handleJoin(c, ch)
-			}(client, channel)
+		// Create test channels and clients
+		channels := []string{"#test1", "#test2", "#test3"}
+		numClients := 10
+		clients := make([]*Client, numClients)
+		
+		for i := 0; i < numClients; i++ {
+			clients[i] = NewClient(&mockConn{readData: strings.NewReader("")}, cfg)
+			clients[i].nick = fmt.Sprintf("user%d", i)
+			srv.clients[clients[i].nick] = clients[i]
 		}
-	}
-	wg.Wait()
 
-	// Verify channel membership
-	for _, channel := range channels {
-		if ch, exists := srv.channels[channel]; exists {
-			if len(ch.Members) != numClients {
-				t.Errorf("Expected %d members in channel %s, got %d", numClients, channel, len(ch.Members))
+		var wg sync.WaitGroup
+	
+		// Concurrent joins
+		wg.Add(numClients * len(channels))
+		for _, client := range clients {
+			for _, channel := range channels {
+				go func(c *Client, ch string) {
+					defer wg.Done()
+					srv.handleJoin(c, ch)
+				}(client, channel)
 			}
-		} else {
-			t.Errorf("Channel %s not created", channel)
 		}
-	}
+		wg.Wait()
 
-	// Concurrent messages
-	wg.Add(numClients * len(channels))
-	for _, client := range clients {
+		// Verify channel membership
 		for _, channel := range channels {
-			go func(c *Client, ch string) {
-				defer wg.Done()
-				srv.deliverMessage(c, ch, "PRIVMSG", "test message")
-			}(client, channel)
+			if ch, exists := srv.channels[channel]; exists {
+				if len(ch.Members) != numClients {
+					t.Errorf("Expected %d members in channel %s, got %d", numClients, channel, len(ch.Members))
+				}
+			} else {
+				t.Errorf("Channel %s not created", channel)
+			}
 		}
-	}
-	wg.Wait()
 
-	// Concurrent parts
-	wg.Add(numClients * len(channels))
-	for _, client := range clients {
-		for _, channel := range channels {
-			go func(c *Client, ch string) {
-				defer wg.Done()
-				srv.handlePart(c, ch)
-			}(client, channel)
+		// Concurrent messages
+		wg.Add(numClients * len(channels))
+		for _, client := range clients {
+			for _, channel := range channels {
+				go func(c *Client, ch string) {
+					defer wg.Done()
+					srv.deliverMessage(c, ch, "PRIVMSG", "test message")
+				}(client, channel)
+			}
 		}
-	}
-	wg.Wait()
+		wg.Wait()
 
-	// Verify all channels are empty
-	if len(srv.channels) != 0 {
-		t.Errorf("Expected all channels to be removed, got %d remaining", len(srv.channels))
+		// Concurrent parts
+		wg.Add(numClients * len(channels))
+		for _, client := range clients {
+			for _, channel := range channels {
+				go func(c *Client, ch string) {
+					defer wg.Done()
+					srv.handlePart(c, ch)
+				}(client, channel)
+			}
+		}
+		wg.Wait()
+
+		// Verify all channels are empty
+		if len(srv.channels) != 0 {
+			t.Errorf("Expected all channels to be removed, got %d remaining", len(srv.channels))
+		}
+		
+		done <- true
+	}()
+
+	select {
+	case <-timeout:
+		t.Fatal("Test timed out after 5 seconds")
+	case <-done:
+		// Test completed successfully
 	}
 }
 
