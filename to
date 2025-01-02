@@ -1,0 +1,1 @@
+if err := client.Send(fmt.Sprintf("PING :%d", time.Now().Unix()))

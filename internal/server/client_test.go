@@ -240,7 +240,7 @@ func TestPingTimeout(t *testing.T) {
 
 		select {
 		case <-ticker.C:
-			if err := client.Send(fmt.Sprintf("PING :%s", time.Now().Unix())); err != nil {
+			if err := client.Send(fmt.Sprintf("PING :%d", time.Now().Unix())); err != nil {
 				return
 			}
 			client.pingTimer = time.AfterFunc(50*time.Millisecond, func() {
