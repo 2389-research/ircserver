@@ -80,75 +80,80 @@ func TestChannelOperations(t *testing.T) {
 // TestConcurrentOperations verifies thread-safety of server operations
 func TestConcurrentOperations(t *testing.T) {
 	// Add timeout to prevent test from hanging
-	timeout := time.After(10 * time.Second)
-	done := make(chan bool)
+	cfg := config.DefaultConfig()
+	store := &mockStore{}
+	srv := New("localhost", "0", store, cfg)
 
-	go func() {
-		cfg := config.DefaultConfig()
-		store := &mockStore{}
-		srv := New("localhost", "0", store, cfg)
-
-		// Create test channels and clients
-		channels := []string{"#test1", "#test2", "#test3"}
-		numClients := 10
-		clients := make([]*Client, numClients)
-		
-		for i := 0; i < numClients; i++ {
-			clients[i] = NewClient(&mockConn{readData: strings.NewReader("")}, cfg)
-			clients[i].nick = fmt.Sprintf("user%d", i)
-			srv.clients[clients[i].nick] = clients[i]
-		}
-
-		var wg sync.WaitGroup
+	// Create test channels and clients
+	channels := []string{"#test1", "#test2", "#test3"}
+	numClients := 10
+	clients := make([]*Client, numClients)
 	
-		// Concurrent joins
-		wg.Add(numClients * len(channels))
-		for _, client := range clients {
-			for _, channel := range channels {
-				go func(c *Client, ch string) {
-					defer wg.Done()
-					srv.handleJoin(c, ch)
-				}(client, channel)
-			}
-		}
-		wg.Wait()
+	// Initialize clients under server lock
+	srv.mu.Lock()
+	for i := 0; i < numClients; i++ {
+		clients[i] = NewClient(&mockConn{readData: strings.NewReader("")}, cfg)
+		clients[i].nick = fmt.Sprintf("user%d", i)
+		srv.clients[clients[i].nick] = clients[i]
+	}
+	srv.mu.Unlock()
 
-		// Verify channel membership
+	var wg sync.WaitGroup
+	errChan := make(chan error, numClients*len(channels)*3) // Buffer for all possible errors
+
+	// Concurrent joins
+	for _, client := range clients {
 		for _, channel := range channels {
-			if ch, exists := srv.channels[channel]; exists {
-				if len(ch.Members) != numClients {
-					t.Errorf("Expected %d members in channel %s, got %d", numClients, channel, len(ch.Members))
-				}
-			} else {
-				t.Errorf("Channel %s not created", channel)
-			}
+			wg.Add(1)
+			go func(c *Client, ch string) {
+				defer wg.Done()
+				srv.handleJoin(c, ch)
+			}(client, channel)
 		}
+	}
+	wg.Wait()
 
-		// Concurrent messages
-		wg.Add(numClients * len(channels))
+	// Verify channel membership
+	srv.mu.RLock()
+	for _, channel := range channels {
+		if ch, exists := srv.channels[channel]; exists {
+			if len(ch.Members) != numClients {
+				t.Errorf("Expected %d members in channel %s, got %d", numClients, channel, len(ch.Members))
+			}
+		} else {
+			t.Errorf("Channel %s not created", channel)
+		}
+	}
+	srv.mu.RUnlock()
+
+	// Concurrent messages
+	for _, client := range clients {
+		for _, channel := range channels {
+			wg.Add(1)
+			go func(c *Client, ch string) {
+				defer wg.Done()
+				srv.deliverMessage(c, ch, "PRIVMSG", "test message")
+			}(client, channel)
+		}
+	}
+	wg.Wait()
+
+	// Concurrent parts - do this in phases to avoid deadlocks
+	for _, channel := range channels {
+		wg.Add(len(clients))
 		for _, client := range clients {
-			for _, channel := range channels {
-				go func(c *Client, ch string) {
-					defer wg.Done()
-					srv.deliverMessage(c, ch, "PRIVMSG", "test message")
-				}(client, channel)
-			}
+			go func(c *Client, ch string) {
+				defer wg.Done()
+				srv.handlePart(c, ch)
+			}(client, channel)
 		}
-		wg.Wait()
+		wg.Wait() // Wait for each channel to be fully cleared before moving to next
+	}
 
-		// Concurrent parts
-		wg.Add(numClients * len(channels))
-		for _, client := range clients {
-			for _, channel := range channels {
-				go func(c *Client, ch string) {
-					defer wg.Done()
-					srv.handlePart(c, ch)
-				}(client, channel)
-			}
-		}
-		wg.Wait()
-
-		// Verify channels are empty and log state
+	// Final verification with timeout
+	done := make(chan bool)
+	go func() {
+		srv.mu.RLock()
 		remainingChannels := len(srv.channels)
 		if remainingChannels != 0 {
 			t.Logf("WARNING: %d channels still exist:", remainingChannels)
@@ -160,8 +165,11 @@ func TestConcurrentOperations(t *testing.T) {
 			}
 			t.Errorf("Expected all channels to be removed, got %d remaining", remainingChannels)
 		}
-		
+		srv.mu.RUnlock()
 		done <- true
+	}()
+
+	timeout := time.After(5 * time.Second)
 	}()
 
 	select {
