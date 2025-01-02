@@ -14,6 +14,7 @@ func setupTestWebServer(t *testing.T) *WebServer {
 	ws := &WebServer{
 		ircServer: ircServer,
 		messages:  make([]MessageInfo, 0),
+		mu:        sync.RWMutex{},
 	}
 	ircServer.SetWebServer(ws)
 	return ws
@@ -65,11 +66,18 @@ func TestMessageSendingViaWeb(t *testing.T) {
 
 	ws.mu.RLock()
 	defer ws.mu.RUnlock()
+	// Give a small window for async operations to complete
+	time.Sleep(100 * time.Millisecond)
+	
 	if len(ws.messages) != 1 {
 		t.Errorf("Expected 1 message, got %d", len(ws.messages))
+		return
 	}
 	if ws.messages[0].Content != "Hello, world!" {
 		t.Errorf("Expected message content 'Hello, world!', got '%s'", ws.messages[0].Content)
+	}
+	if ws.messages[0].To != "#test" {
+		t.Errorf("Expected message target '#test', got '%s'", ws.messages[0].To)
 	}
 }
 
