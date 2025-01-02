@@ -715,10 +715,10 @@ func (s *Server) removeClient(client *Client) {
 
 	// Remove from channels
 	for _, channelName := range channels {
-		if channel := s.channels[channelName]; channel != nil {
-			channel.RemoveClient(client.nick)
+		if ch := s.channels[channelName]; ch != nil {
+			ch.RemoveClient(client.nick)
 			// If channel is empty, remove it
-			if len(channel.GetClients()) == 0 {
+			if len(ch.GetClients()) == 0 {
 				delete(s.channels, channelName)
 			}
 		}
