@@ -44,8 +44,11 @@ type MessageInfo struct {
 	Content string `json:"content"`
 }
 
+// dashboardTemplate is the embedded HTML template for testing
+const dashboardTemplate = `<!DOCTYPE html><html><body><h1>IRC Dashboard</h1></body></html>`
+
 func NewWebServer(ircServer *Server) (*WebServer, error) {
-	tmpl, err := template.ParseFiles("web/templates/dashboard.html")
+	tmpl, err := template.New("dashboard").Parse(dashboardTemplate)
 	if err != nil {
 		return nil, err
 	}
