@@ -2,8 +2,12 @@ package server
 
 import (
 	"context"
+	"fmt"
+	"math/rand"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"ircserver/internal/config"
 	"ircserver/internal/persistence"
@@ -71,6 +75,132 @@ func TestChannelOperations(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestConcurrentOperations verifies thread-safety of server operations
+func TestConcurrentOperations(t *testing.T) {
+	// Add timeout for the whole test
+	_, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	const (
+		numClients  = 50
+		numChannels = 10
+		numMessages = 100
+	)
+
+	cfg := config.DefaultConfig()
+	store := &mockStore{}
+	srv := New("localhost", "0", store, cfg)
+
+	// Create test channels
+	channels := make([]string, numChannels)
+	for i := 0; i < numChannels; i++ {
+		channels[i] = fmt.Sprintf("#test%d", i)
+	}
+
+	// Create and register clients
+	clients := make([]*Client, numClients)
+	for i := 0; i < numClients; i++ {
+		mockConn := &mockConn{readData: strings.NewReader("")}
+		clients[i] = NewClient(mockConn, cfg)
+		clients[i].nick = fmt.Sprintf("user%d", i)
+		clients[i].username = fmt.Sprintf("user%d", i)
+		clients[i].realname = fmt.Sprintf("User %d", i)
+
+		srv.mu.Lock()
+		srv.clients[clients[i].nick] = clients[i]
+		srv.mu.Unlock()
+	}
+
+	// WaitGroup for all operations
+	var wg sync.WaitGroup
+
+	// Launch concurrent join operations
+	for _, client := range clients {
+		wg.Add(1)
+		go func(c *Client) {
+			defer wg.Done()
+			// Each client joins random channels
+			for _, channel := range channels[:rand.Intn(len(channels))+1] {
+				srv.handleJoin(c, channel)
+			}
+		}(client)
+	}
+
+	// Wait for joins to complete
+	wg.Wait()
+	t.Log("Join operations completed")
+
+	// Launch message operations
+	for i := 0; i < numMessages; i++ {
+		wg.Add(1)
+		go func(msgNum int) {
+			defer wg.Done()
+			client := clients[msgNum%numClients]
+			channel := channels[msgNum%numChannels]
+			msg := fmt.Sprintf("Message %d", msgNum)
+			srv.deliverMessage(client, channel, "PRIVMSG", msg)
+		}(i)
+	}
+
+	// Wait for messages to complete
+	wg.Wait()
+	t.Log("Message operations completed")
+
+	// Now launch part operations - ensure all clients leave all channels
+	for _, channel := range channels {
+		srv.mu.RLock()
+		ch, exists := srv.channels[channel]
+		srv.mu.RUnlock()
+
+		if !exists {
+			continue
+		}
+
+		// Get members under read lock
+		ch.mu.RLock()
+		members := make([]*Client, 0, len(ch.Members))
+		for _, member := range ch.Members {
+			members = append(members, member.Client)
+		}
+		ch.mu.RUnlock()
+
+		// Now have each member part
+		for _, client := range members {
+			wg.Add(1)
+			go func(c *Client, channelName string) {
+				defer wg.Done()
+				srv.handlePart(c, channelName)
+			}(client, channel)
+		}
+	}
+
+	// Wait for parts to complete
+	wg.Wait()
+	t.Log("Part operations completed")
+
+	// Give a small window for cleanup
+	time.Sleep(100 * time.Millisecond)
+
+	// Verify final state
+	srv.mu.RLock()
+	remainingChannels := len(srv.channels)
+	var channelNames []string
+	for name := range srv.channels {
+		channelNames = append(channelNames, name)
+	}
+	srv.mu.RUnlock()
+
+	if remainingChannels != 0 {
+		t.Errorf("Expected all channels to be removed, got %d. Remaining channels: %v",
+			remainingChannels, channelNames)
+	}
+
+	// Clean up
+	for _, client := range clients {
+		client.Close()
 	}
 }
 

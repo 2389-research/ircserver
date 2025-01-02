@@ -12,19 +12,74 @@ import (
 	"sync"
 	"time"
 )
+
 // Server represents an IRC server instance.
 type Server struct {
 	host      string
 	port      string
-	clients   map[string]*Client
-	channels  map[string]*Channel
+	clients   map[string]*Client  // Protected by mu
+	channels  map[string]*Channel // Protected by mu
 	store     persistence.Store
 	logger    *Logger
 	webServer *WebServer
 	config    *config.Config
 	listener  net.Listener
 	shutdown  chan struct{}
-	mu        sync.RWMutex
+	mu        sync.RWMutex // Protects clients and channels maps
+}
+
+// serverState represents an immutable snapshot of server state
+type serverState struct {
+	clients  map[string]*Client
+	channels map[string]*Channel
+}
+
+// getState creates a deep copy of server state under read lock
+func (s *Server) getState() serverState {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	clients := make(map[string]*Client, len(s.clients))
+	for k, v := range s.clients {
+		clients[k] = v
+	}
+
+	channels := make(map[string]*Channel, len(s.channels))
+	for k, v := range s.channels {
+		channels[k] = v
+	}
+
+	return serverState{
+		clients:  clients,
+		channels: channels,
+	}
+}
+
+// serverSnapshot contains copied server state
+type serverSnapshot struct {
+	channels map[string]*Channel
+	clients  map[string]*Client
+}
+
+// snapshot creates a copy of server state under read lock
+func (s *Server) snapshot() serverSnapshot {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	channels := make(map[string]*Channel, len(s.channels))
+	for k, v := range s.channels {
+		channels[k] = v
+	}
+
+	clients := make(map[string]*Client, len(s.clients))
+	for k, v := range s.clients {
+		clients[k] = v
+	}
+
+	return serverSnapshot{
+		channels: channels,
+		clients:  clients,
+	}
 }
 
 // New creates a new IRC server instance.
@@ -317,31 +372,47 @@ func (s *Server) handleQuit(client *Client, args string) {
 	client.conn.Close()
 }
 
+// getOrCreateChannel safely gets or creates a channel without holding the server lock during channel operations
+func (s *Server) getOrCreateChannel(name string) *Channel {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	channel, exists := s.channels[name]
+	if !exists {
+		channel = NewChannel(name)
+		s.channels[name] = channel
+	}
+	return channel
+}
+
+// handleJoin with improved concurrency
 func (s *Server) handleJoin(client *Client, args string) {
 	// First validate all channel names
 	channelNames := strings.Split(args, ",")
 	for _, name := range channelNames {
 		name = strings.TrimSpace(name)
 		if !isValidChannelName(name) || strings.Contains(name, ",") {
-			if err := client.Send(fmt.Sprintf(":server 403 %s %s :Invalid channel name", client.nick, name)); err != nil {
-				log.Printf("ERROR: Failed to send invalid channel name error: %v", err)
-			}
-			return // Exit early if any channel name is invalid
+			client.Send(fmt.Sprintf(":server 403 %s %s :Invalid channel name", client.nick, name))
+			return
 		}
 	}
 
 	// Now process each valid channel
 	for _, channelName := range channelNames {
 		channelName = strings.TrimSpace(channelName)
-		s.mu.Lock()
-		channel, exists := s.channels[channelName]
-		if !exists {
-			channel = NewChannel(channelName)
-			s.channels[channelName] = channel
-		}
-		channel.AddClient(client, UserModeNormal)
-		client.channels[channelName] = true
 
+		// Get or create channel without extended lock holding
+		channel := s.getOrCreateChannel(channelName)
+
+		// Add client to channel
+		channel.AddClient(client, UserModeNormal)
+
+		// Update client's channel list
+		client.mu.Lock()
+		client.channels[channelName] = true
+		client.mu.Unlock()
+
+		// Log events and update storage
 		ctx := context.Background()
 		if err := s.logger.LogEvent(ctx, EventJoin, client, channelName, ""); err != nil {
 			log.Printf("ERROR: Failed to log join event: %v", err)
@@ -351,106 +422,87 @@ func (s *Server) handleJoin(client *Client, args string) {
 			s.logger.LogError("Failed to store channel info", err)
 		}
 
-		s.mu.Unlock()
-
 		// Send JOIN message to all clients in the channel
 		joinMsg := fmt.Sprintf(":%s JOIN %s", client, channelName)
-		if err := s.broadcastToChannel(channelName, joinMsg); err != nil {
-			log.Printf("ERROR: Failed to broadcast join message: %v", err)
-		}
+		s.broadcastToChannel(channelName, joinMsg)
 
-		// Always send topic reply - either the topic or no topic message
+		// Send topic if it exists
 		topic := channel.GetTopic()
 		if topic != "" {
-			if err := client.Send(fmt.Sprintf(":server 332 %s %s :%s", client.nick, channelName, topic)); err != nil {
-				log.Printf("ERROR: Failed to send channel topic: %v", err)
-			}
+			client.Send(fmt.Sprintf(":server 332 %s %s :%s", client.nick, channelName, topic))
 		} else {
-			if err := client.Send(fmt.Sprintf(":server 331 %s %s :No topic is set", client.nick, channelName)); err != nil {
-				log.Printf("ERROR: Failed to send no topic message: %v", err)
-			}
+			client.Send(fmt.Sprintf(":server 331 %s %s :No topic is set", client.nick, channelName))
 		}
 
 		// Send list of users in channel
-		names := []string{}
-		for _, member := range channel.GetMembers() {
-			c := member.Client
-			names = append(names, c.nick)
+		members := channel.GetMembers()
+		names := make([]string, 0, len(members))
+		for _, member := range members {
+			names = append(names, member.Client.nick)
 		}
-		if err := client.Send(fmt.Sprintf(":server 353 %s = %s :%s", client.nick, channelName, strings.Join(names, " "))); err != nil {
-			log.Printf("ERROR: Failed to send channel names list: %v", err)
-		}
-		if err := client.Send(fmt.Sprintf(":server 366 %s %s :End of /NAMES list", client.nick, channelName)); err != nil {
-			log.Printf("ERROR: Failed to send end of names list: %v", err)
-		}
+		client.Send(fmt.Sprintf(":server 353 %s = %s :%s", client.nick, channelName, strings.Join(names, " ")))
+		client.Send(fmt.Sprintf(":server 366 %s %s :End of /NAMES list", client.nick, channelName))
 	}
 }
 
 func (s *Server) handlePart(client *Client, args string) {
 	if args == "" {
-		if err := client.Send(":server 461 PART :Not enough parameters"); err != nil {
-			log.Printf("ERROR: Failed to send parameters error: %v", err)
-		}
+		client.Send(":server 461 PART :Not enough parameters")
 		return
 	}
 
 	channels := strings.Split(args, ",")
 	for _, channelName := range channels {
 		channelName = strings.TrimSpace(channelName)
-		
-		s.mu.Lock()
+
+		// First check if channel exists
+		s.mu.RLock()
 		channel, exists := s.channels[channelName]
+		s.mu.RUnlock()
+
 		if !exists {
-			s.mu.Unlock()
-			if err := client.Send(fmt.Sprintf(":server 403 %s %s :No such channel", client.nick, channelName)); err != nil {
-				log.Printf("ERROR: Failed to send no such channel error: %v", err)
-			}
+			client.Send(fmt.Sprintf(":server 403 %s %s :No such channel", client.nick, channelName))
 			continue
 		}
 
-		// Check if client is actually in the channel
+		// Check membership and send error if not in channel
 		if !channel.HasMember(client.nick) {
-			s.mu.Unlock()
-			if err := client.Send(fmt.Sprintf(":server 442 %s %s :You're not on that channel", client.nick, channelName)); err != nil {
-				log.Printf("ERROR: Failed to send not on channel error: %v", err)
-			}
+			client.Send(fmt.Sprintf(":server 442 %s %s :You're not on that channel", client.nick, channelName))
 			continue
 		}
 
-		// Check if client is actually in the channel
-		if !channel.HasMember(client.nick) {
-			s.mu.Unlock()
-			if err := client.Send(fmt.Sprintf(":server 442 %s %s :You're not on that channel", client.nick, channelName)); err != nil {
-				log.Printf("ERROR: Failed to send not on channel error: %v", err)
-			}
-			continue
-		}
-
-		// Send PART message to all clients in the channel (including the leaving client)
+		// Send PART message before removing
 		partMsg := fmt.Sprintf(":%s PART %s", client, channelName)
-		if err := s.broadcastToChannel(channelName, partMsg); err != nil {
-			log.Printf("ERROR: Failed to broadcast PART message: %v", err)
-		}
+		s.broadcastToChannel(channelName, partMsg)
 
 		// Remove client from channel
 		channel.RemoveClient(client.nick)
+
+		// Update client's channel list
+		client.mu.Lock()
 		delete(client.channels, channelName)
+		client.mu.Unlock()
+
+		// If channel is empty after removal, remove it from server
+		if channel.IsEmpty() {
+			s.mu.Lock()
+			// Check again if empty under write lock
+			if channel.IsEmpty() {
+				delete(s.channels, channelName)
+				// Log channel deletion
+				ctx := context.Background()
+				if err := s.logger.LogEvent(ctx, EventChannelDelete, client, channelName, "Channel removed - last user left"); err != nil {
+					log.Printf("ERROR: Failed to log channel deletion: %v", err)
+				}
+			}
+			s.mu.Unlock()
+		}
 
 		// Log the PART event
 		ctx := context.Background()
 		if err := s.logger.LogEvent(ctx, EventPart, client, channelName, ""); err != nil {
 			log.Printf("ERROR: Failed to log part event: %v", err)
 		}
-
-		// Check if channel is now empty after removing the client
-		if channel.IsEmpty() {
-			delete(s.channels, channelName)
-			if err := s.logger.LogEvent(ctx, EventChannelDelete, client, channelName, "Channel removed - last user left"); err != nil {
-				log.Printf("ERROR: Failed to log channel deletion: %v", err)
-			}
-		}
-		
-		s.mu.Unlock()
 	}
 }
 
@@ -553,7 +605,7 @@ func (s *Server) handleTopic(client *Client, args string) {
 			}
 		} else {
 			if err := client.Send(fmt.Sprintf(":server 332 %s %s :%s", client.nick, channelName, topic)); err != nil {
-				log.Printf("ERROR: Failed to send topic message: %v", err) 
+				log.Printf("ERROR: Failed to send topic message: %v", err)
 			}
 		}
 		return
@@ -614,7 +666,7 @@ func (s *Server) handleWho(client *Client, args string) {
 				client.nick, targetClient.username,
 				targetClient.conn.RemoteAddr().String(),
 				targetClient.nick, targetClient.realname)); err != nil {
-				log.Printf("ERROR: Failed to send WHO response: %v", err) 
+				log.Printf("ERROR: Failed to send WHO response: %v", err)
 			}
 		}
 	}
@@ -627,9 +679,7 @@ func (s *Server) handleWho(client *Client, args string) {
 func (s *Server) deliverMessage(from *Client, target, msgType, message string) {
 	formattedMsg := fmt.Sprintf(":%s %s %s :%s", from, msgType, target, message)
 
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
+	// Log message before acquiring any locks
 	s.logger.LogMessage(from, target, msgType, message)
 
 	// Track message in web interface if available
@@ -638,7 +688,11 @@ func (s *Server) deliverMessage(from *Client, target, msgType, message string) {
 	}
 
 	if strings.HasPrefix(target, "#") {
+		// Get channel reference under read lock
+		s.mu.RLock()
 		channel, exists := s.channels[target]
+		s.mu.RUnlock()
+
 		if !exists {
 			err := from.Send(fmt.Sprintf(":server 403 %s %s :No such channel", from.nick, target))
 			if err != nil {
@@ -646,12 +700,12 @@ func (s *Server) deliverMessage(from *Client, target, msgType, message string) {
 			}
 			return
 		}
-		
+
+		// Take snapshot of channel members
+		snapshot := channel.snapshot()
+
 		// Send to all clients in channel except sender
-		channel.mu.RLock()
-		members := channel.GetMembers()
-		channel.mu.RUnlock()
-		for _, member := range members {
+		for _, member := range snapshot.members {
 			client := member.Client
 			if client.nick != from.nick {
 				if err := client.Send(formattedMsg); err != nil {
@@ -677,20 +731,20 @@ func (s *Server) deliverMessage(from *Client, target, msgType, message string) {
 }
 
 func (s *Server) broadcastToChannel(channelName string, message string) error {
+	// Get channel under read lock
 	s.mu.RLock()
-	defer s.mu.RUnlock()
-
 	channel, exists := s.channels[channelName]
+	s.mu.RUnlock()
+
 	if !exists {
 		return fmt.Errorf("channel %s does not exist", channelName)
 	}
 
-	channel.mu.RLock()
-	defer channel.mu.RUnlock()
+	// Take snapshot of channel members
+	snapshot := channel.snapshot()
 
 	var firstErr error
-	members := channel.GetMembers()
-	for _, member := range members {
+	for _, member := range snapshot.members {
 		client := member.Client
 		if client.nick != message {
 			if err := client.Send(message); err != nil {
