@@ -16,10 +16,11 @@ const (
 	EventDisconnect EventType = "DISCONNECT"
 	EventJoin       EventType = "JOIN"
 	EventPart       EventType = "PART"
-	EventMessage    EventType = "MESSAGE"
-	EventNick       EventType = "NICK"
-	EventTopic      EventType = "TOPIC"
-	EventQuit       EventType = "QUIT"
+	EventMessage      EventType = "MESSAGE"
+	EventNick         EventType = "NICK"
+	EventTopic        EventType = "TOPIC"
+	EventQuit         EventType = "QUIT"
+	EventChannelDelete EventType = "CHANNEL_DELETE"
 )
 
 // Logger handles all IRC event logging.
