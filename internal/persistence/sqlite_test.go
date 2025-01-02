@@ -91,24 +91,47 @@ func TestDatabaseErrors(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Test unique constraint violation on users
-	err := store.UpdateUser(ctx, "duplicateuser", "user1", "User One", "127.0.0.1")
+	// Test that we can update existing users
+	err := store.UpdateUser(ctx, "testuser", "user1", "User One", "127.0.0.1")
 	if err != nil {
-		t.Fatalf("Failed to update user: %v", err)
+		t.Fatalf("Failed to create initial user: %v", err)
 	}
-	err = store.UpdateUser(ctx, "duplicateuser", "user2", "User Two", "127.0.0.2")
-	if err == nil {
-		t.Fatal("Expected unique constraint violation, got nil")
+	
+	// Update should succeed
+	err = store.UpdateUser(ctx, "testuser", "user1-updated", "User One Updated", "127.0.0.2")
+	if err != nil {
+		t.Fatalf("Failed to update existing user: %v", err)
 	}
 
-	// Test unique constraint violation on channels
-	err = store.UpdateChannel(ctx, "#duplicatechannel", "Topic One")
+	// Verify the update worked
+	var username, realname string
+	err = store.db.QueryRowContext(ctx, "SELECT username, realname FROM users WHERE nickname = ?", "testuser").Scan(&username, &realname)
 	if err != nil {
-		t.Fatalf("Failed to update channel: %v", err)
+		t.Fatalf("Failed to query updated user: %v", err)
 	}
-	err = store.UpdateChannel(ctx, "#duplicatechannel", "Topic Two")
-	if err == nil {
-		t.Fatal("Expected unique constraint violation, got nil")
+	if username != "user1-updated" || realname != "User One Updated" {
+		t.Errorf("User update failed: got (%s, %s), want (%s, %s)", 
+			username, realname, "user1-updated", "User One Updated")
+	}
+
+	// Similar test for channels
+	err = store.UpdateChannel(ctx, "#testchannel", "Topic One")
+	if err != nil {
+		t.Fatalf("Failed to create initial channel: %v", err)
+	}
+
+	err = store.UpdateChannel(ctx, "#testchannel", "Updated Topic")
+	if err != nil {
+		t.Fatalf("Failed to update existing channel: %v", err)
+	}
+
+	var topic string
+	err = store.db.QueryRowContext(ctx, "SELECT topic FROM channels WHERE name = ?", "#testchannel").Scan(&topic)
+	if err != nil {
+		t.Fatalf("Failed to query updated channel: %v", err)
+	}
+	if topic != "Updated Topic" {
+		t.Errorf("Channel update failed: got %s, want %s", topic, "Updated Topic")
 	}
 }
 
