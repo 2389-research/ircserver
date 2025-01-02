@@ -118,7 +118,7 @@ func (c *Client) pingLoop() {
 			return
 		case <-ticker.C:
 			// Send PING
-			if err := c.Send(fmt.Sprintf("PING :%d", time.Now().Unix())); err != nil {
+			if err := c.Send(fmt.Sprintf("PING :%s", time.Now().Unix())); err != nil {
 				log.Printf("ERROR: Failed to send PING to client %s: %v", c.String(), err)
 				c.conn.Close()
 				return
