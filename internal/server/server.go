@@ -446,15 +446,22 @@ func (s *Server) handlePart(client *Client, args string) {
 
 func (s *Server) handlePrivMsg(client *Client, args string) {
 	parts := strings.SplitN(args, " ", 2)
-	if len(parts) < 2 {
-		if err := client.Send(":server 461 PRIVMSG :Not enough parameters"); err != nil {
-			log.Printf("ERROR: Failed to send parameters error: %v", err)
+	if len(parts) < 2 || parts[0] == "" {
+		if err := client.Send(fmt.Sprintf(":server 411 %s :No recipient given", client.nick)); err != nil {
+			log.Printf("ERROR: Failed to send no recipient error: %v", err)
 		}
 		return
 	}
 
 	target := parts[0]
 	message := strings.TrimPrefix(parts[1], ":")
+	
+	if message == "" {
+		if err := client.Send(fmt.Sprintf(":server 412 %s :No text to send", client.nick)); err != nil {
+			log.Printf("ERROR: Failed to send no text error: %v", err)
+		}
+		return
+	}
 
 	// Validate target format
 	if target == "" {
@@ -477,7 +484,10 @@ func (s *Server) handlePrivMsg(client *Client, args string) {
 	// Handle multiple targets separated by commas
 	targets := strings.Split(target, ",")
 	for _, t := range targets {
-		s.deliverMessage(client, t, "PRIVMSG", message)
+		t = strings.TrimSpace(t)
+		if t != "" {
+			s.deliverMessage(client, t, "PRIVMSG", message)
+		}
 	}
 }
 

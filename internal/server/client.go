@@ -62,7 +62,7 @@ func (c *Client) Send(message string) error {
 
 	// Queue the message for rate-limited delivery
 	select {
-	case c.msgQueue <- message:
+	case c.msgQueue <- message + "\r\n":
 		return nil
 	default:
 		return fmt.Errorf("message queue full")
