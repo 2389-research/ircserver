@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"ircserver/internal/config"
 	"ircserver/internal/persistence"
@@ -118,5 +119,26 @@ func TestChannelMultiUserOperations(t *testing.T) {
 	// Verify channel cleanup after last user parts
 	if len(srv.channels) != 0 {
 		t.Error("Expected channel to be removed after last user left")
+	}
+}
+
+func TestMessageBroadcastingPerformance(t *testing.T) {
+	cfg := config.DefaultConfig()
+	store := &mockStore{}
+	srv := New("localhost", "0", store, cfg)
+
+	clients := make([]*Client, 100)
+	for i := range clients {
+		clients[i] = NewClient(&mockConn{readData: strings.NewReader("")}, cfg)
+		clients[i].nick = fmt.Sprintf("user%d", i+1)
+		srv.handleJoin(clients[i], "#test")
+	}
+
+	start := time.Now()
+	srv.handlePrivMsg(clients[0], "#test :Performance test message")
+	elapsed := time.Since(start)
+
+	if elapsed > 100*time.Millisecond {
+		t.Errorf("Message broadcasting took too long: %v", elapsed)
 	}
 }

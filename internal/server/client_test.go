@@ -215,3 +215,103 @@ func TestClientString(t *testing.T) {
 		t.Errorf("String() = %q, want %q", got, "testuser")
 	}
 }
+
+func TestPrivMsgToUsers(t *testing.T) {
+	cfg := config.DefaultConfig()
+	conn1 := &mockConn{readData: strings.NewReader("NICK user1\r\nUSER test 0 * :Test User\r\n")}
+	conn2 := &mockConn{readData: strings.NewReader("NICK user2\r\nUSER test 0 * :Test User\r\n")}
+	client1 := NewClient(conn1, cfg)
+	client2 := NewClient(conn2, cfg)
+
+	go client1.handleConnection()
+	go client2.handleConnection()
+
+	time.Sleep(100 * time.Millisecond) // Allow time for connection handling
+
+	message := "PRIVMSG user2 :Hello user2!"
+	client1.Send(message)
+
+	expected := fmt.Sprintf(":%s PRIVMSG user2 :Hello user2!\r\n", client1.nick)
+	if got := conn2.writeData.String(); !strings.Contains(got, expected) {
+		t.Errorf("Expected response %q not found in output: %q", expected, got)
+	}
+}
+
+func TestPrivMsgToChannels(t *testing.T) {
+	cfg := config.DefaultConfig()
+	conn1 := &mockConn{readData: strings.NewReader("NICK user1\r\nUSER test 0 * :Test User\r\nJOIN #test\r\n")}
+	conn2 := &mockConn{readData: strings.NewReader("NICK user2\r\nUSER test 0 * :Test User\r\nJOIN #test\r\n")}
+	client1 := NewClient(conn1, cfg)
+	client2 := NewClient(conn2, cfg)
+
+	go client1.handleConnection()
+	go client2.handleConnection()
+
+	time.Sleep(100 * time.Millisecond) // Allow time for connection handling
+
+	message := "PRIVMSG #test :Hello channel!"
+	client1.Send(message)
+
+	expected := fmt.Sprintf(":%s PRIVMSG #test :Hello channel!\r\n", client1.nick)
+	if got := conn2.writeData.String(); !strings.Contains(got, expected) {
+		t.Errorf("Expected response %q not found in output: %q", expected, got)
+	}
+}
+
+func TestNoticeHandling(t *testing.T) {
+	cfg := config.DefaultConfig()
+	conn1 := &mockConn{readData: strings.NewReader("NICK user1\r\nUSER test 0 * :Test User\r\n")}
+	conn2 := &mockConn{readData: strings.NewReader("NICK user2\r\nUSER test 0 * :Test User\r\n")}
+	client1 := NewClient(conn1, cfg)
+	client2 := NewClient(conn2, cfg)
+
+	go client1.handleConnection()
+	go client2.handleConnection()
+
+	time.Sleep(100 * time.Millisecond) // Allow time for connection handling
+
+	message := "NOTICE user2 :This is a notice"
+	client1.Send(message)
+
+	expected := fmt.Sprintf(":%s NOTICE user2 :This is a notice\r\n", client1.nick)
+	if got := conn2.writeData.String(); !strings.Contains(got, expected) {
+		t.Errorf("Expected response %q not found in output: %q", expected, got)
+	}
+}
+
+func TestMessageSizeLimits(t *testing.T) {
+	cfg := config.DefaultConfig()
+	conn := &mockConn{readData: strings.NewReader("NICK user1\r\nUSER test 0 * :Test User\r\n")}
+	client := NewClient(conn, cfg)
+
+	go client.handleConnection()
+
+	time.Sleep(100 * time.Millisecond) // Allow time for connection handling
+
+	oversizedMessage := strings.Repeat("A", cfg.IRC.MaxMessageLength+1)
+	message := fmt.Sprintf("PRIVMSG user2 :%s", oversizedMessage)
+	client.Send(message)
+
+	expected := ":server ERROR :Message too long\r\n"
+	if got := conn.writeData.String(); !strings.Contains(got, expected) {
+		t.Errorf("Expected response %q not found in output: %q", expected, got)
+	}
+}
+
+func TestInvalidMessageFormats(t *testing.T) {
+	cfg := config.DefaultConfig()
+	conn := &mockConn{readData: strings.NewReader("NICK user1\r\nUSER test 0 * :Test User\r\n")}
+	client := NewClient(conn, cfg)
+
+	go client.handleConnection()
+
+	time.Sleep(100 * time.Millisecond) // Allow time for connection handling
+
+	invalidMessage := "INVALID MESSAGE FORMAT"
+	client.Send(invalidMessage)
+
+	expected := "421 user1 INVALID :Unknown command\r\n"
+	if got := conn.writeData.String(); !strings.Contains(got, expected) {
+		t.Errorf("Expected response %q not found in output: %q", expected, got)
+	}
+}
