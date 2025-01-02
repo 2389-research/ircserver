@@ -9,13 +9,16 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
-// Store handles all database operations
-type Store struct {
+// Ensure SQLiteStore implements Store interface
+var _ Store = (*SQLiteStore)(nil)
+
+// SQLiteStore handles all database operations
+type SQLiteStore struct {
 	db *sql.DB
 }
 
 // New creates a new database connection and initializes tables
-func New(dbPath string) (*Store, error) {
+func New(dbPath string) (*SQLiteStore, error) {
 	db, err := sql.Open("sqlite3", dbPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database: %v", err)
@@ -26,11 +29,11 @@ func New(dbPath string) (*Store, error) {
 		return nil, err
 	}
 
-	return &Store{db: db}, nil
+	return &SQLiteStore{db: db}, nil
 }
 
 // Close closes the database connection
-func (s *Store) Close() error {
+func (s *SQLiteStore) Close() error {
 	return s.db.Close()
 }
 
@@ -69,7 +72,7 @@ func createTables(db *sql.DB) error {
 }
 
 // LogMessage stores a message in the database
-func (s *Store) LogMessage(sender, recipient, msgType, content string) error {
+func (s *SQLiteStore) LogMessage(sender, recipient, msgType, content string) error {
 	query := `INSERT INTO message_logs (timestamp, sender, recipient, message_type, content)
 			 VALUES (?, ?, ?, ?, ?)`
 	
@@ -81,7 +84,7 @@ func (s *Store) LogMessage(sender, recipient, msgType, content string) error {
 }
 
 // UpdateUser stores or updates user information
-func (s *Store) UpdateUser(nickname, username, realname, ipAddr string) error {
+func (s *SQLiteStore) UpdateUser(nickname, username, realname, ipAddr string) error {
 	query := `INSERT OR REPLACE INTO users (nickname, username, realname, ip_address, last_seen)
 			 VALUES (?, ?, ?, ?, ?)`
 	
@@ -93,7 +96,7 @@ func (s *Store) UpdateUser(nickname, username, realname, ipAddr string) error {
 }
 
 // UpdateChannel stores or updates channel information
-func (s *Store) UpdateChannel(name, topic string) error {
+func (s *SQLiteStore) UpdateChannel(name, topic string) error {
 	query := `INSERT OR REPLACE INTO channels (name, topic, created_at)
 			 VALUES (?, ?, ?)`
 	
