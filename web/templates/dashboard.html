@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>IRC Server Dashboard</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>IRC Server Dashboard</h1>
+        
+        <div class="grid">
+            <div class="panel">
+                <h2>Users Online</h2>
+                <div id="users-list"></div>
+            </div>
+            
+            <div class="panel">
+                <h2>Channels</h2>
+                <div id="channels-list"></div>
+            </div>
+        </div>
+
+        <div class="panel">
+            <h2>Send Message</h2>
+            <form id="message-form">
+                <input type="text" id="target" placeholder="Target (user or #channel)" required>
+                <input type="text" id="content" placeholder="Message" required>
+                <button type="submit">Send</button>
+            </form>
+        </div>
+    </div>
+
+    <script src="/static/js/dashboard.js"></script>
+</body>
+</html>
