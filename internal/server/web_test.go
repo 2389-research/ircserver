@@ -88,7 +88,6 @@ func TestConcurrentWebRequests(t *testing.T) {
 				t.Errorf("failed to create request: %v", err)
 				return
 			}
-			}
 
 			rr := httptest.NewRecorder()
 			handler := http.HandlerFunc(ws.handleAPIData)
