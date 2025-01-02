@@ -168,6 +168,8 @@ func (s *Server) handleConnection(conn net.Conn) error {
 		client.UpdateActivity()
 
 		message = strings.TrimSpace(message)
+		client.lastMessage = "" // P2680
+
 		if err := s.handleMessage(ctx, client, message); err != nil {
 			log.Printf("ERROR: Failed to handle message from %s: %v", client, err)
 			return err
@@ -399,6 +401,8 @@ func (s *Server) handlePrivMsg(client *Client, args string) {
 	target := parts[0]
 	message := strings.TrimPrefix(parts[1], ":")
 
+	client.lastMessage = "" // P2917
+
 	s.logger.LogMessage(client, target, "PRIVMSG", message)
 
 	s.deliverMessage(client, target, "PRIVMSG", message)
@@ -571,6 +575,10 @@ func (s *Server) broadcastToChannel(channelName string, message string) error {
 		return fmt.Errorf("channel %s does not exist", channelName)
 	}
 
+	if message == channel.lastMessage { // Pfb37
+		return nil
+	}
+
 	channel.mu.RLock()
 	clients := make([]*Client, 0, len(channel.Clients))
 	for _, client := range channel.Clients {
@@ -588,6 +596,7 @@ func (s *Server) broadcastToChannel(channelName string, message string) error {
 			log.Printf("ERROR: Failed to send message to client %s: %v", client.String(), err)
 		}
 	}
+	channel.lastMessage = message // Pfb37
 	return firstErr
 }
 

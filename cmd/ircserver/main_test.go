@@ -170,3 +170,38 @@ func TestErrorHandling(t *testing.T) {
 		panic("Simulated panic")
 	})
 }
+
+func TestDuplicateMessagePrevention(t *testing.T) {
+	store := setupTestDB(t)
+	defer store.Close()
+
+	ctx := context.Background()
+	err := store.LogMessage(ctx, "sender", "recipient", "PRIVMSG", "Hello, world!")
+	if err != nil {
+		t.Fatalf("Failed to log message: %v", err)
+	}
+
+	// Log the same message again
+	err = store.LogMessage(ctx, "sender", "recipient", "PRIVMSG", "Hello, world!")
+	if err != nil {
+		t.Fatalf("Failed to log message: %v", err)
+	}
+
+	// Query the message log to ensure no duplicates
+	rows, err := store.Query(ctx, "SELECT COUNT(*) FROM message_logs WHERE sender = ? AND recipient = ? AND message_type = ? AND content = ?", "sender", "recipient", "PRIVMSG", "Hello, world!")
+	if err != nil {
+		t.Fatalf("Failed to query message log: %v", err)
+	}
+	defer rows.Close()
+
+	var count int
+	if rows.Next() {
+		if err := rows.Scan(&count); err != nil {
+			t.Fatalf("Failed to scan row: %v", err)
+		}
+	}
+
+	if count != 1 {
+		t.Errorf("Expected 1 message log entry, got %d", count)
+	}
+}

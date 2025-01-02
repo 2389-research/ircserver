@@ -23,6 +23,7 @@ type Client struct {
 	lastActive time.Time
 	done       chan struct{}
 	config     *config.Config
+	lastMessage string // P758e
 }
 
 // NewClient creates a new IRC client instance.
@@ -52,12 +53,17 @@ func (c *Client) Send(message string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	if message == c.lastMessage { // P8214
+		return nil
+	}
+
 	_, err := c.writer.WriteString(message + "\r\n")
 	if err != nil {
 		log.Printf("ERROR: Failed to send message to client %s: %v", c.String(), err)
 		return err
 	}
 	log.Printf("DEBUG: Sent to client %s: %s", c.String(), message)
+	c.lastMessage = message // P8214
 	return c.writer.Flush()
 }
 
@@ -109,6 +115,7 @@ func (c *Client) handleConnection() error {
 
 		c.UpdateActivity()
 		line = strings.TrimSpace(line)
+		c.lastMessage = "" // P2680
 
 		if line == "" {
 			continue
@@ -154,7 +161,7 @@ func (c *Client) handleConnection() error {
 				return &IRCError{Code: "461", Message: "Not enough parameters"}
 			}
 			c.username = parts[1]
-			c.realname = strings.TrimPrefix(strings.Join(parts[4:], " "), ":")
+			c.realname = strings.TrimPrefix(strings.join(parts[4:], " "), ":")
 			return nil
 		}
 
@@ -165,6 +172,7 @@ func (c *Client) handleConnection() error {
 		}
 	}
 }
+
 // String returns a string representation of the client.
 func (c *Client) String() string {
 	if c.nick == "" {
