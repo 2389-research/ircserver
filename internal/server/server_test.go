@@ -99,7 +99,6 @@ func TestConcurrentOperations(t *testing.T) {
 	srv.mu.Unlock()
 
 	var wg sync.WaitGroup
-	errChan := make(chan error, numClients*len(channels)*3) // Buffer for all possible errors
 
 	// Concurrent joins
 	for _, client := range clients {
