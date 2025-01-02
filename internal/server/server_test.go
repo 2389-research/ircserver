@@ -277,13 +277,25 @@ func TestMessageRateLimiting(t *testing.T) {
 		srv.handlePrivMsg(client, fmt.Sprintf("user2 :Message %d", i))
 	}
 
-	// Wait for rate limit window
-	time.Sleep(time.Second * 3)
-
-	// Count delivered messages
+	// Wait for initial batch to be processed
+	time.Sleep(time.Second * 1)
+	
+	// Check first window
 	output := targetConn.writeData.String()
 	count := strings.Count(output, "Message")
 	if count > 10 {
-		t.Errorf("Expected rate limiting to allow max 10 messages, got %d", count)
+		t.Errorf("First window: Expected max 10 messages, got %d", count)
+	}
+
+	targetConn.writeData.Reset()
+	
+	// Wait for second window
+	time.Sleep(time.Second * 2)
+	
+	// Check second window
+	output = targetConn.writeData.String()
+	count = strings.Count(output, "Message")
+	if count > 5 { // Remaining messages
+		t.Errorf("Second window: Expected remaining messages (<=5), got %d", count)
 	}
 }

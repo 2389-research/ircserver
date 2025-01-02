@@ -60,26 +60,13 @@ func (c *Client) Send(message string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	var err error
-	maxRetries := 3
-	if c.config.IRC.MaxRetries > 0 {
-		maxRetries = c.config.IRC.MaxRetries
+	// Queue the message for rate-limited delivery
+	select {
+	case c.msgQueue <- message:
+		return nil
+	default:
+		return fmt.Errorf("message queue full")
 	}
-	retryDelay := time.Second
-	if c.config.IRC.RetryDelay > 0 {
-		retryDelay = c.config.IRC.RetryDelay
-	}
-
-	for retries := maxRetries; retries > 0; retries-- {
-		_, err = c.writer.WriteString(message + "\r\n")
-		if err == nil {
-			log.Printf("DEBUG: Sent to client %s: %s", c.String(), message)
-			return c.writer.Flush()
-		}
-		log.Printf("ERROR: Failed to send message to client %s: %v", c.String(), err)
-		time.Sleep(retryDelay)
-	}
-	return err
 }
 
 func (c *Client) monitorIdle() {
