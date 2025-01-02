@@ -2,7 +2,7 @@ package persistence
 
 import (
 	"context"
-	"database/sql"
+
 	"sync"
 	"testing"
 	"time"
