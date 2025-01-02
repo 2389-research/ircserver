@@ -581,11 +581,14 @@ func (s *Server) broadcastToChannel(channelName string, message string) error {
 	// Send messages after releasing locks to prevent deadlocks
 	var firstErr error
 	for _, client := range clients {
-		if err := client.Send(message); err != nil {
-			if firstErr == nil {
-				firstErr = fmt.Errorf("failed to broadcast to %s: %w", client.String(), err)
+		// Use type assertion to check if this is a test client
+		if tc, ok := interface{}(client).(interface{ Send(string) error }); ok {
+			if err := tc.Send(message); err != nil {
+				if firstErr == nil {
+					firstErr = fmt.Errorf("failed to broadcast to %s: %w", client.String(), err)
+				}
+				log.Printf("ERROR: Failed to send message to client %s: %v", client.String(), err)
 			}
-			log.Printf("ERROR: Failed to send message to client %s: %v", client.String(), err)
 		}
 	}
 	return firstErr
