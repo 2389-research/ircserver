@@ -49,6 +49,14 @@ func TestDashboardDataRetrieval(t *testing.T) {
 
 func TestMessageSendingViaWeb(t *testing.T) {
 	ws := setupTestWebServer(t)
+	
+	// Create the test channel first
+	ws.ircServer.mu.Lock()
+	ws.ircServer.channels["#test"] = &Channel{
+		Name:    "#test",
+		Clients: make(map[string]*Client),
+	}
+	ws.ircServer.mu.Unlock()
 
 	msg := `{"target": "#test", "content": "Hello, world!"}`
 	req, err := http.NewRequest("POST", "/api/send", strings.NewReader(msg))
