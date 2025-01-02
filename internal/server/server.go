@@ -11,20 +11,22 @@ import (
 
 // Server represents an IRC server instance
 type Server struct {
-	host     string
-	port     string
-	clients  map[string]*Client
-	channels map[string]*Channel
-	mu       sync.RWMutex
+	host      string
+	port      string
+	tlsConfig *tls.Config
+	clients   map[string]*Client
+	channels  map[string]*Channel
+	mu        sync.RWMutex
 }
 
 // New creates a new IRC server instance
-func New(host, port string) *Server {
+func New(host, port string, tlsConfig *tls.Config) *Server {
 	return &Server{
-		host:     host,
-		port:     port,
-		clients:  make(map[string]*Client),
-		channels: make(map[string]*Channel),
+		host:      host,
+		port:      port,
+		tlsConfig: tlsConfig,
+		clients:   make(map[string]*Client),
+		channels:  make(map[string]*Channel),
 	}
 }
 
@@ -32,7 +34,16 @@ func New(host, port string) *Server {
 func (s *Server) Start() error {
 	addr := fmt.Sprintf("%s:%s", s.host, s.port)
 
-	listener, err := net.Listen("tcp", addr)
+	var listener net.Listener
+	var err error
+	
+	if s.tlsConfig != nil {
+		listener, err = tls.Listen("tcp", addr, s.tlsConfig)
+		log.Printf("INFO: TLS enabled on server")
+	} else {
+		listener, err = net.Listen("tcp", addr)
+		log.Printf("INFO: Running in plain TCP mode")
+	}
 	if err != nil {
 		return fmt.Errorf("failed to start server: %v", err)
 	}
