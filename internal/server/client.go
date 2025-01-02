@@ -145,7 +145,7 @@ func (c *Client) handleConnection() error {
 				continue
 			}
 			if !isValidNick(nick) {
-				if err := c.Send("432 * :Erroneous nickname"); err != nil {
+				if err := c.Send(fmt.Sprintf("432 * %s :Erroneous nickname - must be 1-9 chars, start with letter, and contain only letters, numbers, - or _", nick)); err != nil {
 					return err
 				}
 				continue
