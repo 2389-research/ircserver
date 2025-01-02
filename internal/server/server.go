@@ -719,9 +719,6 @@ func (s *Server) removeClient(client *Client) {
 			ch.RemoveClient(client.nick)
 			// If channel is empty, remove it
 			if len(ch.GetClients()) == 0 {
-			channel.RemoveClient(client.nick)
-			// If channel is empty, remove it
-			if len(channel.GetClients()) == 0 {
 				delete(s.channels, channelName)
 			}
 		}
