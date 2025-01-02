@@ -447,7 +447,8 @@ func (s *Server) handlePart(client *Client, args string) {
 func (s *Server) handlePrivMsg(client *Client, args string) {
 	parts := strings.SplitN(args, " ", 2)
 	if len(parts) < 2 || parts[0] == "" {
-		if err := client.Send(fmt.Sprintf(":server 411 %s :No recipient given", client.nick)); err != nil {
+		err := client.Send(fmt.Sprintf(":server 411 %s :No recipient given (PRIVMSG)", client.nick))
+		if err != nil {
 			log.Printf("ERROR: Failed to send no recipient error: %v", err)
 		}
 		return
@@ -458,7 +459,8 @@ func (s *Server) handlePrivMsg(client *Client, args string) {
 
 	// Validate message
 	if message == "" {
-		if err := client.Send(fmt.Sprintf(":server 412 %s :No text to send", client.nick)); err != nil {
+		err := client.Send(fmt.Sprintf(":server 412 %s :No text to send", client.nick))
+		if err != nil {
 			log.Printf("ERROR: Failed to send no text error: %v", err)
 		}
 		return
@@ -628,22 +630,28 @@ func (s *Server) deliverMessage(from *Client, target, msgType, message string) {
 	if strings.HasPrefix(target, "#") {
 		channel, exists := s.channels[target]
 		if !exists {
-			if err := from.Send(fmt.Sprintf(":server 403 %s %s :No such channel", from.nick, target)); err != nil {
+			err := from.Send(fmt.Sprintf(":server 403 %s %s :No such channel", from.nick, target))
+			if err != nil {
 				log.Printf("ERROR: Failed to send no such channel error: %v", err)
 			}
 			return
 		}
 		
-		// Use a separate goroutine for channel broadcast to avoid deadlock
-		go func(ch *Channel, msg string) {
-			if err := s.broadcastToChannel(target, msg); err != nil {
-				log.Printf("ERROR: Failed to broadcast channel message: %v", err)
+		// Send to all clients in channel except sender
+		channel.mu.RLock()
+		for _, client := range channel.Clients {
+			if client.nick != from.nick {
+				if err := client.Send(formattedMsg); err != nil {
+					log.Printf("ERROR: Failed to send channel message to %s: %v", client.nick, err)
+				}
 			}
-		}(channel, formattedMsg)
+		}
+		channel.mu.RUnlock()
 	} else {
 		to, exists := s.clients[target]
 		if !exists {
-			if err := from.Send(fmt.Sprintf(":server 401 %s %s :No such nick/channel", from.nick, target)); err != nil {
+			err := from.Send(fmt.Sprintf(":server 401 %s %s :No such nick/channel", from.nick, target))
+			if err != nil {
 				log.Printf("ERROR: Failed to send no such nick error: %v", err)
 			}
 			return
