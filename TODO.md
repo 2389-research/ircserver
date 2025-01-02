@@ -39,7 +39,7 @@
 
 ## Phase 7: Final Integration
 
--   [ ] Ensure all components (IRC server, persistence, web interface, logging, config) work together
--   [ ] Implement graceful shutdown (close DB, cleanup resources)
--   [ ] Document usage and configuration in README
+-   [x] Ensure all components (IRC server, persistence, web interface, logging, config) work together
+-   [x] Implement graceful shutdown (close DB, cleanup resources)
+-   [x] Document usage and configuration in README
 -   [ ] Test with basic IRC clients/bots to ensure RFC 1459 compliance
