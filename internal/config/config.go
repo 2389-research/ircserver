@@ -27,8 +27,9 @@ type Config struct {
 		WriteTimeout     time.Duration `yaml:"write_timeout"`
 		MaxBufferSize    int           `yaml:"max_buffer_size"`
 		IdleTimeout      time.Duration `yaml:"idle_timeout"`
-		MaxRetries      int           `yaml:"max_retries"`
-		RetryDelay      time.Duration `yaml:"retry_delay"`
+		MaxRetries       int           `yaml:"max_retries"`
+		RetryDelay       time.Duration `yaml:"retry_delay"`
+		KeepaliveInterval time.Duration `yaml:"keepalive_interval"`
 	} `yaml:"irc"`
 }
 
@@ -53,6 +54,7 @@ func DefaultConfig() *Config {
 	cfg.IRC.IdleTimeout = 600 * time.Second
 	cfg.IRC.MaxRetries = 3
 	cfg.IRC.RetryDelay = 1 * time.Second
+	cfg.IRC.KeepaliveInterval = 60 * time.Second
 	return cfg
 }
 

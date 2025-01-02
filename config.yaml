@@ -13,3 +13,4 @@ irc:
   max_message_length: 512
   max_retries: 3
   retry_delay: 100ms
+  keepalive_interval: 60s

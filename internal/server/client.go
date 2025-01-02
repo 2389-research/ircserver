@@ -38,6 +38,9 @@ func NewClient(conn net.Conn, cfg *config.Config) *Client {
 
 	// Start idle timeout monitor
 	go client.monitorIdle()
+	// Start keepalive monitor
+	go client.startKeepalive()
+
 	addr := conn.RemoteAddr()
 	addrStr := "unknown"
 	if addr != nil {
@@ -89,6 +92,25 @@ func (c *Client) monitorIdle() {
 
 			if idle > c.config.IRC.IdleTimeout {
 				log.Printf("INFO: Client %s timed out after %v of inactivity", c.String(), idle)
+				c.conn.Close()
+				return
+			}
+		}
+	}
+}
+
+// startKeepalive sends keepalive messages at regular intervals.
+func (c *Client) startKeepalive() {
+	ticker := time.NewTicker(c.config.IRC.KeepaliveInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-c.done:
+			return
+		case <-ticker.C:
+			if err := c.Send("PING :keepalive"); err != nil {
+				log.Printf("ERROR: Failed to send keepalive message: %v", err)
 				c.conn.Close()
 				return
 			}
@@ -167,7 +189,7 @@ func (c *Client) handleConnection() error {
 				return &IRCError{Code: "461", Message: "Not enough parameters"}
 			}
 			c.username = parts[1]
-			c.realname = strings.TrimPrefix(strings.Join(parts[4:], " "), ":")
+			c.realname = strings.TrimPrefix(strings.join(parts[4:], " "), ":")
 			return nil
 		}
 
@@ -178,6 +200,7 @@ func (c *Client) handleConnection() error {
 		}
 	}
 }
+
 // String returns a string representation of the client.
 func (c *Client) String() string {
 	if c.nick == "" {

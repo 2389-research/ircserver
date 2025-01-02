@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"ircserver/internal/config"
 	"ircserver/internal/persistence"
@@ -118,5 +119,40 @@ func TestChannelMultiUserOperations(t *testing.T) {
 	// Verify channel cleanup after last user parts
 	if len(srv.channels) != 0 {
 		t.Error("Expected channel to be removed after last user left")
+	}
+}
+
+func TestClientConnection(t *testing.T) {
+	cfg := config.DefaultConfig()
+	store := &mockStore{}
+	srv := New("localhost", "0", store, cfg)
+
+	client := NewClient(&mockConn{readData: strings.NewReader("NICK testuser\r\nUSER test 0 * :Test User\r\n")}, cfg)
+	srv.clients["testuser"] = client
+
+	go func() {
+		if err := srv.handleConnection(client.conn); err != nil {
+			t.Errorf("handleConnection() error = %v", err)
+		}
+	}()
+
+	time.Sleep(2 * time.Second)
+
+	if client.nick != "testuser" {
+		t.Errorf("Expected nickname 'testuser', got '%s'", client.nick)
+	}
+
+	if client.username != "test" {
+		t.Errorf("Expected username 'test', got '%s'", client.username)
+	}
+
+	if client.realname != "Test User" {
+		t.Errorf("Expected realname 'Test User', got '%s'", client.realname)
+	}
+
+	// Test keepalive functionality
+	time.Sleep(65 * time.Second)
+	if !strings.Contains(client.conn.(*mockConn).writeData.String(), "PING :keepalive") {
+		t.Error("Expected keepalive PING message to be sent")
 	}
 }

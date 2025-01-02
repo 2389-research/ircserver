@@ -205,3 +205,89 @@ func TestMessageSendRetries(t *testing.T) {
 		t.Fatalf("Failed to log message after retries: %v", err)
 	}
 }
+
+func TestClientConnection(t *testing.T) {
+	tests := []struct {
+		name              string
+		input             string
+		nick              string
+		wantErr           bool
+		expectedResponses []string
+	}{
+		{
+			name:    "valid connection with nick",
+			input:   "NICK validnick\r\nUSER test 0 * :Test User\r\n",
+			nick:    "validnick",
+			wantErr: false,
+			expectedResponses: []string{
+				":* NICK validnick\r\n",
+			},
+		},
+		{
+			name:    "invalid nick character",
+			input:   "NICK invalid@nick\r\nUSER test 0 * :Test User\r\n",
+			wantErr: false,
+			expectedResponses: []string{
+				"432 * :Erroneous nickname\r\n",
+			},
+		},
+		{
+			name:    "missing USER command",
+			input:   "NICK validnick\r\n",
+			wantErr: true,
+		},
+		{
+			name:    "empty nick",
+			input:   "NICK \r\nUSER test 0 * :Test User\r\n",
+			wantErr: false, // Changed to false since we handle this gracefully now
+			expectedResponses: []string{
+				"431 * :No nickname given\r\n",
+			},
+		},
+		{
+			name:    "EOF handling",
+			input:   "",
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := config.DefaultConfig()
+			conn := &mockConn{
+				readData: strings.NewReader(tt.input),
+			}
+			client := NewClient(conn, cfg)
+
+			// Start client processing in background
+			errCh := make(chan error, 1)
+			go func() {
+				errCh <- client.handleConnection()
+			}()
+
+			// Wait for processing or timeout
+			select {
+			case err := <-errCh:
+				if (err != nil) != tt.wantErr {
+					t.Errorf("handleConnection() error = %v, wantErr %v", err, tt.wantErr)
+				}
+			case <-time.After(100 * time.Millisecond):
+				t.Error("handleConnection() timeout")
+			}
+
+			if !tt.wantErr {
+				if client.nick != tt.nick {
+					t.Errorf("Expected nickname %q, got %q", tt.nick, client.nick)
+				}
+
+				// Verify expected responses
+				output := conn.writeData.String()
+				for _, expected := range tt.expectedResponses {
+					if !strings.Contains(output, expected) {
+						t.Errorf("Expected response %q not found in output: %q", expected, output)
+					}
+				}
+			}
+		})
+	}
+}
