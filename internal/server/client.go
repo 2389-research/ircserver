@@ -52,13 +52,17 @@ func (c *Client) Send(message string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	_, err := c.writer.WriteString(message + "\r\n")
-	if err != nil {
+	var err error
+	for retries := c.config.IRC.MaxRetries; retries > 0; retries-- {
+		_, err = c.writer.WriteString(message + "\r\n")
+		if err == nil {
+			log.Printf("DEBUG: Sent to client %s: %s", c.String(), message)
+			return c.writer.Flush()
+		}
 		log.Printf("ERROR: Failed to send message to client %s: %v", c.String(), err)
-		return err
+		time.Sleep(c.config.IRC.RetryDelay)
 	}
-	log.Printf("DEBUG: Sent to client %s: %s", c.String(), message)
-	return c.writer.Flush()
+	return err
 }
 
 func (c *Client) monitorIdle() {

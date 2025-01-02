@@ -11,3 +11,5 @@ storage:
 irc:
   default_channel: "#general"
   max_message_length: 512
+  max_retries: 3
+  retry_delay: 100ms
