@@ -1,6 +1,7 @@
 package server
 
 import (
+	"ircserver/internal/persistence"
 	"net"
 	"strings"
 	"testing"
@@ -8,7 +9,9 @@ import (
 )
 
 // mockStore implements persistence.Store interface for testing
-type mockStore struct{}
+type mockStore struct{} 
+
+var _ persistence.Store = (*mockStore)(nil) // Compile-time interface check
 
 func (m *mockStore) Close() error                                                { return nil }
 func (m *mockStore) LogMessage(sender, recipient, msgType, content string) error { return nil }
