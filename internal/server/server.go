@@ -380,7 +380,9 @@ func (s *Server) handlePart(client *Client, args string) {
 			}
 		} else {
 			s.mu.Unlock()
-			client.Send(fmt.Sprintf(":server 403 %s %s :No such channel", client.nick, channelName))
+			if err := client.Send(fmt.Sprintf(":server 403 %s %s :No such channel", client.nick, channelName)); err != nil {
+				log.Printf("ERROR: Failed to send no such channel error: %v", err)
+			}
 		}
 	}
 }
@@ -535,7 +537,9 @@ func (s *Server) deliverMessage(from *Client, target, msgType, message string) {
 		s.mu.RLock()
 		if _, exists := s.channels[target]; exists {
 			s.mu.RUnlock()
-			s.broadcastToChannel(target, fmt.Sprintf(":%s %s %s :%s", from, msgType, target, message))
+			if err := s.broadcastToChannel(target, fmt.Sprintf(":%s %s %s :%s", from, msgType, target, message)); err != nil {
+				log.Printf("ERROR: Failed to broadcast channel message: %v", err)
+			}
 		} else {
 			s.mu.RUnlock()
 			if err := from.Send(fmt.Sprintf(":server 403 %s %s :No such channel", from.nick, target)); err != nil {
