@@ -20,6 +20,7 @@ type Server struct {
 	store     persistence.Store
 	logger    *Logger
 	webServer *WebServer
+	config    *config.Config
 	mu        sync.RWMutex
 }
 
@@ -407,6 +408,13 @@ func (s *Server) SetWebServer(ws *WebServer) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.webServer = ws
+}
+
+// SetConfig sets the server configuration
+func (s *Server) SetConfig(cfg *config.Config) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.config = cfg
 }
 
 func (s *Server) removeClient(client *Client) {

@@ -33,9 +33,9 @@
 
 ## Phase 6: Configuration
 
--   [ ] Load YAML config (server_name, host, port, etc.)
--   [ ] Replace hardcoded values with config data
--   [ ] Provide sane defaults for missing/invalid config
+-   [x] Load YAML config (server_name, host, port, etc.)
+-   [x] Replace hardcoded values with config data
+-   [x] Provide sane defaults for missing/invalid config
 
 ## Phase 7: Final Integration
 

@@ -1,35 +1,36 @@
 package main
 
 import (
+	"flag"
 	"log"
-	"os"
 
+	"ircserver/internal/config"
 	"ircserver/internal/persistence"
 	"ircserver/internal/server"
 )
 
-func getEnv(key, fallback string) string {
-	if value, exists := os.LookupEnv(key); exists {
-		return value
-	}
-	return fallback
-}
-
 func main() {
-	// Default to localhost:6667 if not specified
-	host := getEnv("IRC_HOST", "localhost")
-	port := getEnv("IRC_PORT", "6667")
-	dbPath := getEnv("IRC_DB_PATH", "irc.db")
+	configPath := flag.String("config", "config.yaml", "path to config file")
+	flag.Parse()
+
+	// Load configuration
+	cfg, err := config.Load(*configPath)
+	if err != nil {
+		log.Fatalf("FATAL: Configuration error: %v", err)
+	}
 
 	// Initialize database
-	store, err := persistence.New(dbPath)
+	store, err := persistence.New(cfg.Storage.SQLitePath)
 	if err != nil {
 		log.Fatalf("FATAL: Database initialization error: %v", err)
 	}
 	defer store.Close()
 
-	log.Printf("INFO: Starting IRC server with host=%s port=%s", host, port)
-	srv := server.New(host, port, store)
+	log.Printf("INFO: Starting IRC server %s with host=%s port=%s", 
+		cfg.Server.Name, cfg.Server.Host, cfg.Server.Port)
+	
+	srv := server.New(cfg.Server.Host, cfg.Server.Port, store)
+	srv.SetConfig(cfg)
 	
 	// Start web interface
 	webServer, err := server.NewWebServer(srv)
@@ -39,7 +40,7 @@ func main() {
 	
 	// Start web server in a goroutine
 	go func() {
-		webAddr := getEnv("IRC_WEB_ADDR", ":8080")
+		webAddr := ":" + cfg.Server.WebPort
 		log.Printf("INFO: Starting web interface on %s", webAddr)
 		if err := webServer.Start(webAddr); err != nil {
 			log.Fatalf("FATAL: Web server error: %v", err)
