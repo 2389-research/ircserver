@@ -416,6 +416,15 @@ func (s *Server) handlePart(client *Client, args string) {
 			continue
 		}
 
+		// Check if client is actually in the channel
+		if !channel.HasClient(client.nick) {
+			s.mu.Unlock()
+			if err := client.Send(fmt.Sprintf(":server 442 %s %s :You're not on that channel", client.nick, channelName)); err != nil {
+				log.Printf("ERROR: Failed to send not on channel error: %v", err)
+			}
+			continue
+		}
+
 		// Send PART message to all clients in the channel (including the leaving client)
 		partMsg := fmt.Sprintf(":%s PART %s", client, channelName)
 		if err := s.broadcastToChannel(channelName, partMsg); err != nil {
@@ -674,15 +683,10 @@ func (s *Server) broadcastToChannel(channelName string, message string) error {
 	}
 
 	channel.mu.RLock()
-	clients := make([]*Client, 0, len(channel.Clients))
-	for _, client := range channel.Clients {
-		clients = append(clients, client)
-	}
-	channel.mu.RUnlock()
+	defer channel.mu.RUnlock()
 
-	// Send messages after releasing locks to prevent deadlocks
 	var firstErr error
-	for _, client := range clients {
+	for _, client := range channel.Clients {
 		if err := client.Send(message); err != nil {
 			if firstErr == nil {
 				firstErr = fmt.Errorf("failed to broadcast to %s: %w", client.String(), err)
