@@ -158,22 +158,22 @@ func (s *Server) handleQuit(client *Client, args string) {
 
 func (s *Server) handleJoin(client *Client, args string) {
 	channels := strings.Split(args, ",")
-	for _, channel := range channels {
-		channel = strings.TrimSpace(channel)
-		if !strings.HasPrefix(channel, "#") {
-			channel = "#" + channel
+	for _, channelName := range channels {
+		channelName = strings.TrimSpace(channelName)
+		if !strings.HasPrefix(channelName, "#") {
+			channelName = "#" + channelName
 		}
 
 		s.mu.Lock()
-		if s.channels[channel] == nil {
-			s.channels[channel] = make(map[string]bool)
+		if s.channels[channelName] == nil {
+			s.channels[channelName] = make(map[string]bool)
 		}
-		s.channels[channel][client.nick] = true
-		client.channels[channel] = true
+		s.channels[channelName][client.nick] = true
+		client.channels[channelName] = true
 		s.mu.Unlock()
 
 		// Notify all clients in the channel
-		s.broadcastToChannel(channel, fmt.Sprintf(":%s JOIN %s", client, channel))
+		s.broadcastToChannel(channelName, fmt.Sprintf(":%s JOIN %s", client, channelName))
 	}
 }
 
