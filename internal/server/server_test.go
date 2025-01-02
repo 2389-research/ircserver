@@ -173,3 +173,116 @@ func TestChannelMultiUserOperations(t *testing.T) {
 	})
 
 }
+func TestMessageDelivery(t *testing.T) {
+	cfg := config.DefaultConfig()
+	store := &mockStore{}
+	srv := New("localhost", "0", store, cfg)
+
+	tests := []struct {
+		name       string
+		sender     string
+		target     string
+		message    string
+		msgType    string
+		wantError  bool
+		errorCode  string
+	}{
+		{"valid private message", "user1", "user2", "Hello!", "PRIVMSG", false, ""},
+		{"valid channel message", "user1", "#test", "Hello channel!", "PRIVMSG", false, ""},
+		{"empty target", "user1", "", "Hello!", "PRIVMSG", true, "411"},
+		{"empty message", "user1", "user2", "", "PRIVMSG", true, "412"},
+		{"multiple targets", "user1", "user2,user3", "Hello all!", "PRIVMSG", false, ""},
+		{"notice to channel", "user1", "#test", "Notice!", "NOTICE", false, ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Setup sender
+			senderConn := &mockConn{readData: strings.NewReader("")}
+			sender := NewClient(senderConn, cfg)
+			sender.nick = tt.sender
+			srv.clients[tt.sender] = sender
+
+			// Setup target(s)
+			if strings.HasPrefix(tt.target, "#") {
+				srv.channels[tt.target] = NewChannel(tt.target)
+			} else {
+				for _, target := range strings.Split(tt.target, ",") {
+					if target != "" {
+						targetConn := &mockConn{readData: strings.NewReader("")}
+						targetClient := NewClient(targetConn, cfg)
+						targetClient.nick = target
+						srv.clients[target] = targetClient
+					}
+				}
+			}
+
+			// Test message delivery
+			if tt.msgType == "PRIVMSG" {
+				srv.handlePrivMsg(sender, fmt.Sprintf("%s :%s", tt.target, tt.message))
+			} else {
+				srv.handleNotice(sender, fmt.Sprintf("%s :%s", tt.target, tt.message))
+			}
+
+			// Check for expected errors
+			output := senderConn.writeData.String()
+			if tt.wantError {
+				if !strings.Contains(output, tt.errorCode) {
+					t.Errorf("Expected error code %s, got output: %s", tt.errorCode, output)
+				}
+			} else {
+				// Verify message delivery
+				if strings.HasPrefix(tt.target, "#") {
+					channel := srv.channels[tt.target]
+					for _, client := range channel.Clients {
+						if client.nick != tt.sender {
+							clientConn := client.conn.(*mockConn)
+							if !strings.Contains(clientConn.writeData.String(), tt.message) {
+								t.Errorf("Expected channel message delivery to %s", client.nick)
+							}
+						}
+					}
+				} else {
+					for _, target := range strings.Split(tt.target, ",") {
+						targetClient := srv.clients[target]
+						targetConn := targetClient.conn.(*mockConn)
+						if !strings.Contains(targetConn.writeData.String(), tt.message) {
+							t.Errorf("Expected message delivery to %s", target)
+						}
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestMessageRateLimiting(t *testing.T) {
+	cfg := config.DefaultConfig()
+	store := &mockStore{}
+	srv := New("localhost", "0", store, cfg)
+
+	conn := &mockConn{readData: strings.NewReader("")}
+	client := NewClient(conn, cfg)
+	client.nick = "user1"
+	srv.clients["user1"] = client
+
+	targetConn := &mockConn{readData: strings.NewReader("")}
+	target := NewClient(targetConn, cfg)
+	target.nick = "user2"
+	srv.clients["user2"] = target
+
+	// Send messages rapidly
+	for i := 0; i < 15; i++ {
+		srv.handlePrivMsg(client, fmt.Sprintf("user2 :Message %d", i))
+	}
+
+	// Wait for rate limit window
+	time.Sleep(time.Second * 3)
+
+	// Count delivered messages
+	output := targetConn.writeData.String()
+	count := strings.Count(output, "Message")
+	if count > 10 {
+		t.Errorf("Expected rate limiting to allow max 10 messages, got %d", count)
+	}
+}

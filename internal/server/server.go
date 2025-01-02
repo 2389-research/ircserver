@@ -456,9 +456,29 @@ func (s *Server) handlePrivMsg(client *Client, args string) {
 	target := parts[0]
 	message := strings.TrimPrefix(parts[1], ":")
 
+	// Validate target format
+	if target == "" {
+		if err := client.Send(":server 411 :No recipient given"); err != nil {
+			log.Printf("ERROR: Failed to send no recipient error: %v", err)
+		}
+		return
+	}
+
+	// Validate message
+	if message == "" {
+		if err := client.Send(":server 412 :No text to send"); err != nil {
+			log.Printf("ERROR: Failed to send no text error: %v", err)
+		}
+		return
+	}
+
 	s.logger.LogMessage(client, target, "PRIVMSG", message)
 
-	s.deliverMessage(client, target, "PRIVMSG", message)
+	// Handle multiple targets separated by commas
+	targets := strings.Split(target, ",")
+	for _, t := range targets {
+		s.deliverMessage(client, t, "PRIVMSG", message)
+	}
 }
 
 func (s *Server) handleNotice(client *Client, args string) {

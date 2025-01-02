@@ -23,6 +23,9 @@ type Client struct {
 	lastActive time.Time
 	done       chan struct{}
 	config     *config.Config
+	msgCount   int           // Messages sent in current window
+	lastMsg    time.Time     // Start of current rate limit window
+	msgQueue   chan string   // Queue for rate-limited messages
 }
 
 // NewClient creates a new IRC client instance.
@@ -34,7 +37,12 @@ func NewClient(conn net.Conn, cfg *config.Config) *Client {
 		lastActive: time.Now(),
 		done:       make(chan struct{}),
 		config:     cfg,
+		lastMsg:    time.Now(),
+		msgQueue:   make(chan string, 100), // Buffer up to 100 messages
 	}
+	
+	// Start message queue processor
+	go client.processMessageQueue()
 
 	// Start idle timeout monitor
 	go client.monitorIdle()
@@ -184,4 +192,39 @@ func (c *Client) String() string {
 		return "unknown"
 	}
 	return c.nick
+}
+func (c *Client) processMessageQueue() {
+	ticker := time.NewTicker(time.Second) // Check queue every second
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-c.done:
+			return
+		case msg := <-c.msgQueue:
+			c.mu.Lock()
+			// Reset rate limit if window has expired
+			if time.Since(c.lastMsg) > time.Second*2 {
+				c.msgCount = 0
+				c.lastMsg = time.Now()
+			}
+			
+			// Check rate limit
+			if c.msgCount < 10 { // Max 10 messages per 2 seconds
+				if err := c.writer.WriteString(msg + "\r\n"); err == nil {
+					c.writer.Flush()
+					c.msgCount++
+				}
+			}
+			c.mu.Unlock()
+		case <-ticker.C:
+			// Reset counters periodically
+			c.mu.Lock()
+			if time.Since(c.lastMsg) > time.Second*2 {
+				c.msgCount = 0
+				c.lastMsg = time.Now()
+			}
+			c.mu.Unlock()
+		}
+	}
 }
