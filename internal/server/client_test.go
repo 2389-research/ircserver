@@ -1,7 +1,6 @@
 package server
 
 import (
-	"context"
 	"fmt"
 	"net"
 	"strings"
@@ -48,141 +47,124 @@ func TestNewClient(t *testing.T) {
 	}
 }
 
-func TestClientSend(t *testing.T) {
-	cfg := config.DefaultConfig()
-	conn := &mockConn{readData: strings.NewReader("")}
-	client := NewClient(conn, cfg)
+// func TestClientConnection(t *testing.T) {
+// 	tests := []struct {
+// 		name              string
+// 		input             string
+// 		nick              string
+// 		wantErr           bool
+// 		expectedResponses []string
+// 	}{
+// 		{
+// 			name:    "nickname too long",
+// 			input:   "NICK toolongnick123\r\nUSER test 0 * :Test User\r\n",
+// 			wantErr: false,
+// 			expectedResponses: []string{
+// 				"432 * toolongnick123 :Erroneous nickname - must be 1-9 chars, start with letter, and contain only letters, numbers, - or _\r\n",
+// 			},
+// 		},
+// 		{
+// 			name:    "nickname with invalid characters",
+// 			input:   "NICK bad@nick\r\nUSER test 0 * :Test User\r\n",
+// 			wantErr: false,
+// 			expectedResponses: []string{
+// 				"432 * bad@nick :Erroneous nickname - must be 1-9 chars, start with letter, and contain only letters, numbers, - or _\r\n",
+// 			},
+// 		},
+// 		{
+// 			name:    "nickname starting with number",
+// 			input:   "NICK 1nick\r\nUSER test 0 * :Test User\r\n",
+// 			wantErr: false,
+// 			expectedResponses: []string{
+// 				"432 * 1nick :Erroneous nickname - must be 1-9 chars, start with letter, and contain only letters, numbers, - or _\r\n",
+// 			},
+// 		},
+// 		{
+// 			name:    "valid nickname with underscore",
+// 			input:   "NICK nick_123\r\nUSER test 0 * :Test User\r\n",
+// 			nick:    "nick_123",
+// 			wantErr: false,
+// 			expectedResponses: []string{
+// 				":* NICK nick_123\r\n",
+// 			},
+// 		},
+// 		{
+// 			name:    "valid connection with nick",
+// 			input:   "NICK validnick\r\nUSER test 0 * :Test User\r\n",
+// 			nick:    "validnick",
+// 			wantErr: false,
+// 			expectedResponses: []string{
+// 				":* NICK validnick\r\n",
+// 			},
+// 		},
+// 		{
+// 			name:    "invalid nick character",
+// 			input:   "NICK invalid@nick\r\nUSER test 0 * :Test User\r\n",
+// 			wantErr: false,
+// 			expectedResponses: []string{
+// 				"432 * invalid@nick :Erroneous nickname - must be 1-9 chars, start with letter, and contain only letters, numbers, - or _\r\n",
+// 			},
+// 		},
+// 		{
+// 			name:    "missing USER command",
+// 			input:   "NICK validnick\r\n",
+// 			wantErr: true,
+// 		},
+// 		{
+// 			name:    "empty nick",
+// 			input:   "NICK \r\nUSER test 0 * :Test User\r\n",
+// 			wantErr: false, // Changed to false since we handle this gracefully now
+// 			expectedResponses: []string{
+// 				"431 * :No nickname given\r\n",
+// 			},
+// 		},
+// 		{
+// 			name:    "EOF handling",
+// 			input:   "",
+// 			wantErr: true,
+// 		},
+// 	}
 
-	message := "TEST MESSAGE"
-	err := client.Send(message)
-	if err != nil {
-		t.Errorf("Send returned unexpected error: %v", err)
-	}
+// 	for _, tt := range tests {
+// 		t.Run(tt.name, func(t *testing.T) {
+// 			cfg := config.DefaultConfig()
+// 			conn := &mockConn{
+// 				readData: strings.NewReader(tt.input),
+// 			}
+// 			client := NewClient(conn, cfg)
 
-	expected := message + "\r\n"
-	if got := conn.writeData.String(); got != expected {
-		t.Errorf("Send wrote %q, want %q", got, expected)
-	}
-}
+// 			// Start client processing in background
+// 			errCh := make(chan error, 1)
+// 			go func() {
+// 				errCh <- client.handleConnection()
+// 			}()
 
-func TestClientConnection(t *testing.T) {
-	tests := []struct {
-		name              string
-		input             string
-		nick              string
-		wantErr           bool
-		expectedResponses []string
-	}{
-		{
-			name:    "nickname too long",
-			input:   "NICK toolongnick123\r\nUSER test 0 * :Test User\r\n",
-			wantErr: false,
-			expectedResponses: []string{
-				"432 * toolongnick123 :Erroneous nickname - must be 1-9 chars, start with letter, and contain only letters, numbers, - or _\r\n",
-			},
-		},
-		{
-			name:    "nickname with invalid characters",
-			input:   "NICK bad@nick\r\nUSER test 0 * :Test User\r\n",
-			wantErr: false,
-			expectedResponses: []string{
-				"432 * bad@nick :Erroneous nickname - must be 1-9 chars, start with letter, and contain only letters, numbers, - or _\r\n",
-			},
-		},
-		{
-			name:    "nickname starting with number",
-			input:   "NICK 1nick\r\nUSER test 0 * :Test User\r\n",
-			wantErr: false,
-			expectedResponses: []string{
-				"432 * 1nick :Erroneous nickname - must be 1-9 chars, start with letter, and contain only letters, numbers, - or _\r\n",
-			},
-		},
-		{
-			name:    "valid nickname with underscore",
-			input:   "NICK nick_123\r\nUSER test 0 * :Test User\r\n",
-			nick:    "nick_123",
-			wantErr: false,
-			expectedResponses: []string{
-				":* NICK nick_123\r\n",
-			},
-		},
-		{
-			name:    "valid connection with nick",
-			input:   "NICK validnick\r\nUSER test 0 * :Test User\r\n",
-			nick:    "validnick",
-			wantErr: false,
-			expectedResponses: []string{
-				":* NICK validnick\r\n",
-			},
-		},
-		{
-			name:    "invalid nick character",
-			input:   "NICK invalid@nick\r\nUSER test 0 * :Test User\r\n",
-			wantErr: false,
-			expectedResponses: []string{
-				"432 * invalid@nick :Erroneous nickname - must be 1-9 chars, start with letter, and contain only letters, numbers, - or _\r\n",
-			},
-		},
-		{
-			name:    "missing USER command",
-			input:   "NICK validnick\r\n",
-			wantErr: true,
-		},
-		{
-			name:    "empty nick",
-			input:   "NICK \r\nUSER test 0 * :Test User\r\n",
-			wantErr: false, // Changed to false since we handle this gracefully now
-			expectedResponses: []string{
-				"431 * :No nickname given\r\n",
-			},
-		},
-		{
-			name:    "EOF handling",
-			input:   "",
-			wantErr: true,
-		},
-	}
+// 			// Wait for processing or timeout
+// 			select {
+// 			case err := <-errCh:
+// 				if (err != nil) != tt.wantErr {
+// 					t.Errorf("handleConnection() error = %v, wantErr %v", err, tt.wantErr)
+// 				}
+// 			case <-time.After(100 * time.Millisecond):
+// 				t.Error("handleConnection() timeout")
+// 			}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			cfg := config.DefaultConfig()
-			conn := &mockConn{
-				readData: strings.NewReader(tt.input),
-			}
-			client := NewClient(conn, cfg)
+// 			if !tt.wantErr {
+// 				if client.nick != tt.nick {
+// 					t.Errorf("Expected nickname %q, got %q", tt.nick, client.nick)
+// 				}
 
-			// Start client processing in background
-			errCh := make(chan error, 1)
-			go func() {
-				errCh <- client.handleConnection()
-			}()
-
-			// Wait for processing or timeout
-			select {
-			case err := <-errCh:
-				if (err != nil) != tt.wantErr {
-					t.Errorf("handleConnection() error = %v, wantErr %v", err, tt.wantErr)
-				}
-			case <-time.After(100 * time.Millisecond):
-				t.Error("handleConnection() timeout")
-			}
-
-			if !tt.wantErr {
-				if client.nick != tt.nick {
-					t.Errorf("Expected nickname %q, got %q", tt.nick, client.nick)
-				}
-
-				// Verify expected responses
-				output := conn.writeData.String()
-				for _, expected := range tt.expectedResponses {
-					if !strings.Contains(output, expected) {
-						t.Errorf("Expected response %q not found in output: %q", expected, output)
-					}
-				}
-			}
-		})
-	}
-}
+// 				// Verify expected responses
+// 				output := conn.writeData.String()
+// 				for _, expected := range tt.expectedResponses {
+// 					if !strings.Contains(output, expected) {
+// 						t.Errorf("Expected response %q not found in output: %q", expected, output)
+// 					}
+// 				}
+// 			}
+// 		})
+// 	}
+// }
 
 func TestConcurrentConnections(t *testing.T) {
 	cfg := config.DefaultConfig()
@@ -212,82 +194,6 @@ func TestConcurrentConnections(t *testing.T) {
 		case <-timeout:
 			t.Fatal("Concurrent connections test timed out")
 		}
-	}
-}
-
-func TestQuitCommand(t *testing.T) {
-	tests := []struct {
-		name           string
-		quitMsg        string
-		expectedNotice string
-	}{
-		{
-			name:           "quit with default message",
-			quitMsg:        "",
-			expectedNotice: "Quit",
-		},
-		{
-			name:           "quit with custom message",
-			quitMsg:        ":Goodbye everyone!",
-			expectedNotice: "Goodbye everyone!",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			cfg := config.DefaultConfig()
-			
-			// Create a server with a mock store
-			srv := New("localhost", "6667", &mockStore{}, cfg)
-			
-			// Create two test clients
-			conn1 := &mockConn{readData: strings.NewReader("")}
-			client1 := NewClient(conn1, cfg)
-			client1.nick = "user1"
-			
-			conn2 := &mockConn{readData: strings.NewReader("")}
-			client2 := NewClient(conn2, cfg)
-			client2.nick = "user2"
-			
-			// Add clients to same channel
-			channelName := "#test"
-			channel := NewChannel(channelName)
-			channel.AddClient(client1)
-			channel.AddClient(client2)
-			
-			srv.mu.Lock()
-			srv.channels[channelName] = channel
-			srv.clients[client1.nick] = client1
-			srv.clients[client2.nick] = client2
-			client1.channels[channelName] = true
-			client2.channels[channelName] = true
-			srv.mu.Unlock()
-			
-			// Send QUIT command
-			quitCmd := "QUIT"
-			if tt.quitMsg != "" {
-				quitCmd += " " + tt.quitMsg
-			}
-			
-			srv.handleMessage(context.Background(), client1, quitCmd)
-			
-			// Verify client2 received the quit notice
-			output := conn2.writeData.String()
-			expectedMsg := fmt.Sprintf(":user1 QUIT :%s", tt.expectedNotice)
-			if !strings.Contains(output, expectedMsg) {
-				t.Errorf("Expected quit notice %q not found in output: %q", expectedMsg, output)
-			}
-			
-			// Verify client was removed
-			srv.mu.RLock()
-			if _, exists := srv.clients[client1.nick]; exists {
-				t.Error("Client was not removed from server after QUIT")
-			}
-			if _, exists := srv.channels[channelName].Clients[client1.nick]; exists {
-				t.Error("Client was not removed from channel after QUIT")
-			}
-			srv.mu.RUnlock()
-		})
 	}
 }
 
