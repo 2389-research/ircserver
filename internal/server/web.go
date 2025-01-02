@@ -195,7 +195,7 @@ func (ws *WebServer) collectDashboardData() DashboardData {
 	// Process channels without holding server lock
 	for name, channel := range channelsCopy {
 		channel.mu.RLock()
-		users := make([]string, 0, len(channel.Clients))
+		users := make([]string, 0)
 		members := channel.GetMembers()
 		for _, member := range members {
 			client := member.Client
