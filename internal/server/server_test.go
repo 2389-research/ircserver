@@ -120,3 +120,198 @@ func TestChannelMultiUserOperations(t *testing.T) {
 		t.Error("Expected channel to be removed after last user left")
 	}
 }
+package server
+
+import (
+	"fmt"
+	"strings"
+	"testing"
+	"time"
+)
+
+type mockClient struct {
+	nick     string
+	messages []string
+}
+
+func (m *mockClient) Send(msg string) error {
+	m.messages = append(m.messages, msg)
+	return nil
+}
+
+func (m *mockClient) GetNick() string {
+	return m.nick
+}
+
+func newMockClient(nick string) *mockClient {
+	return &mockClient{
+		nick:     nick,
+		messages: make([]string, 0),
+	}
+}
+
+func setupTestServer() *Server {
+	return NewServer()
+}
+
+func TestPrivMsgToUser(t *testing.T) {
+	s := setupTestServer()
+	
+	// Setup sender and recipient
+	sender := newMockClient("alice")
+	recipient := newMockClient("bob")
+	
+	s.clients[sender.GetNick()] = sender
+	s.clients[recipient.GetNick()] = recipient
+	
+	// Test sending private message
+	s.handleMessage(sender, "PRIVMSG bob :Hello there!")
+	
+	if len(recipient.messages) != 1 {
+		t.Errorf("Expected 1 message, got %d", len(recipient.messages))
+	}
+	
+	expected := ":alice PRIVMSG bob :Hello there!"
+	if recipient.messages[0] != expected {
+		t.Errorf("Expected message '%s', got '%s'", expected, recipient.messages[0])
+	}
+}
+
+func TestPrivMsgToChannel(t *testing.T) {
+	s := setupTestServer()
+	
+	// Setup clients and channel
+	sender := newMockClient("alice")
+	recipient1 := newMockClient("bob")
+	recipient2 := newMockClient("charlie")
+	
+	channelName := "#test"
+	s.channels[channelName] = &Channel{
+		name:    channelName,
+		clients: map[string]Client{
+			sender.GetNick():     sender,
+			recipient1.GetNick(): recipient1,
+			recipient2.GetNick(): recipient2,
+		},
+	}
+	
+	// Test sending channel message
+	s.handleMessage(sender, "PRIVMSG #test :Hello channel!")
+	
+	expected := ":alice PRIVMSG #test :Hello channel!"
+	
+	// Check that both recipients got the message
+	if len(recipient1.messages) != 1 {
+		t.Errorf("Expected 1 message for bob, got %d", len(recipient1.messages))
+	}
+	if recipient1.messages[0] != expected {
+		t.Errorf("Expected message '%s', got '%s'", expected, recipient1.messages[0])
+	}
+	
+	if len(recipient2.messages) != 1 {
+		t.Errorf("Expected 1 message for charlie, got %d", len(recipient2.messages))
+	}
+	if recipient2.messages[0] != expected {
+		t.Errorf("Expected message '%s', got '%s'", expected, recipient2.messages[0])
+	}
+}
+
+func TestNoticeHandling(t *testing.T) {
+	s := setupTestServer()
+	
+	sender := newMockClient("alice")
+	recipient := newMockClient("bob")
+	
+	s.clients[sender.GetNick()] = sender
+	s.clients[recipient.GetNick()] = recipient
+	
+	// Test NOTICE message
+	s.handleMessage(sender, "NOTICE bob :Server maintenance in 5 minutes")
+	
+	if len(recipient.messages) != 1 {
+		t.Errorf("Expected 1 message, got %d", len(recipient.messages))
+	}
+	
+	expected := ":alice NOTICE bob :Server maintenance in 5 minutes"
+	if recipient.messages[0] != expected {
+		t.Errorf("Expected message '%s', got '%s'", expected, recipient.messages[0])
+	}
+}
+
+func TestMessageSizeLimits(t *testing.T) {
+	s := setupTestServer()
+	
+	sender := newMockClient("alice")
+	recipient := newMockClient("bob")
+	
+	s.clients[sender.GetNick()] = sender
+	s.clients[recipient.GetNick()] = recipient
+	
+	// Create message that exceeds 512 bytes (IRC protocol limit)
+	longMessage := "PRIVMSG bob :" + strings.Repeat("x", 500)
+	
+	// Test sending oversized message
+	s.handleMessage(sender, longMessage)
+	
+	// Verify recipient received nothing due to size limit
+	if len(recipient.messages) != 0 {
+		t.Errorf("Expected no messages due to size limit, got %d", len(recipient.messages))
+	}
+}
+
+func TestInvalidMessageFormats(t *testing.T) {
+	tests := []struct {
+		name    string
+		message string
+	}{
+		{"Empty message", ""},
+		{"Missing target", "PRIVMSG"},
+		{"Missing colon", "PRIVMSG bob Hello"},
+		{"Invalid command", "INVALID bob :Hello"},
+	}
+	
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := setupTestServer()
+			sender := newMockClient("alice")
+			recipient := newMockClient("bob")
+			
+			s.clients[sender.GetNick()] = sender
+			s.clients[recipient.GetNick()] = recipient
+			
+			// Test invalid message
+			s.handleMessage(sender, tt.message)
+			
+			// Verify no messages were sent
+			if len(recipient.messages) != 0 {
+				t.Errorf("Expected no messages for invalid format, got %d", len(recipient.messages))
+			}
+		})
+	}
+}
+
+func BenchmarkChannelBroadcast(b *testing.B) {
+	s := setupTestServer()
+	sender := newMockClient("alice")
+	
+	// Create a channel with 100 users
+	channelName := "#test"
+	channel := &Channel{
+		name:    channelName,
+		clients: make(map[string]Client),
+	}
+	
+	for i := 0; i < 100; i++ {
+		client := newMockClient(fmt.Sprintf("user%d", i))
+		channel.clients[client.GetNick()] = client
+	}
+	
+	s.channels[channelName] = channel
+	
+	message := "PRIVMSG #test :Hello everyone!"
+	
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		s.handleMessage(sender, message)
+	}
+}
