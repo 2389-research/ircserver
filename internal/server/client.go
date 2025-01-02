@@ -63,13 +63,11 @@ func (c *Client) Send(message string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	// Queue the message for rate-limited delivery
-	select {
-	case c.msgQueue <- message:
-		return nil
-	default:
-		return fmt.Errorf("message queue full")
+	// For immediate responses, write directly
+	if _, err := c.writer.WriteString(message + "\r\n"); err != nil {
+		return err
 	}
+	return c.writer.Flush()
 }
 
 func (c *Client) monitorIdle() {
@@ -212,6 +210,7 @@ func (c *Client) handleConnection() error {
 		}
 	}
 }
+
 // String returns a string representation of the client.
 func (c *Client) String() string {
 	if c.nick == "" {
@@ -219,6 +218,7 @@ func (c *Client) String() string {
 	}
 	return c.nick
 }
+
 func (c *Client) processMessageQueue() {
 	ticker := time.NewTicker(time.Second / 10) // Process queue more frequently
 	defer ticker.Stop()
