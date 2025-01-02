@@ -329,7 +329,9 @@ func (s *Server) handleJoin(client *Client, args string) {
 
 		// Send channel topic if it exists
 		if topic := channel.GetTopic(); topic != "" {
-			client.Send(fmt.Sprintf(":server 332 %s %s :%s", client.nick, channelName, topic))
+			if err := client.Send(fmt.Sprintf(":server 332 %s %s :%s", client.nick, channelName, topic)); err != nil {
+				log.Printf("ERROR: Failed to send channel topic: %v", err)
+			}
 		}
 
 		// Send list of users in channel
@@ -337,8 +339,12 @@ func (s *Server) handleJoin(client *Client, args string) {
 		for _, c := range channel.GetClients() {
 			names = append(names, c.nick)
 		}
-		client.Send(fmt.Sprintf(":server 353 %s = %s :%s", client.nick, channelName, strings.Join(names, " ")))
-		client.Send(fmt.Sprintf(":server 366 %s %s :End of /NAMES list", client.nick, channelName))
+		if err := client.Send(fmt.Sprintf(":server 353 %s = %s :%s", client.nick, channelName, strings.Join(names, " "))); err != nil {
+			log.Printf("ERROR: Failed to send channel names list: %v", err)
+		}
+		if err := client.Send(fmt.Sprintf(":server 366 %s %s :End of /NAMES list", client.nick, channelName)); err != nil {
+			log.Printf("ERROR: Failed to send end of names list: %v", err)
+		}
 	}
 }
 
