@@ -26,6 +26,8 @@ type Client struct {
 	msgCount   int           // Messages sent in current window
 	lastMsg    time.Time     // Start of current rate limit window
 	msgQueue   chan string   // Queue for rate-limited messages
+	lastPong   time.Time     // Last time we received a PONG
+	pingTimer  *time.Timer   // Timer for PING timeout
 }
 
 // NewClient creates a new IRC client instance.
@@ -46,6 +48,7 @@ func NewClient(conn net.Conn, cfg *config.Config) *Client {
 
 	// Start idle timeout monitor
 	go client.monitorIdle()
+	go client.pingLoop()
 	addr := conn.RemoteAddr()
 	addrStr := "unknown"
 	if addr != nil {
@@ -105,6 +108,34 @@ func (c *Client) Close() {
 }
 
 // handleConnection processes the client connection.
+func (c *Client) pingLoop() {
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-c.done:
+			return
+		case <-ticker.C:
+			// Send PING
+			if err := c.Send(fmt.Sprintf("PING :%s", time.Now().Unix())); err != nil {
+				log.Printf("ERROR: Failed to send PING to client %s: %v", c.String(), err)
+				c.conn.Close()
+				return
+			}
+
+			// Set/reset ping timeout timer
+			if c.pingTimer != nil {
+				c.pingTimer.Stop()
+			}
+			c.pingTimer = time.AfterFunc(10*time.Second, func() {
+				log.Printf("INFO: Client %s timed out - no PONG response", c.String())
+				c.conn.Close()
+			})
+		}
+	}
+}
+
 func (c *Client) handleConnection() error {
 	reader := bufio.NewReader(c.conn)
 
@@ -125,7 +156,15 @@ func (c *Client) handleConnection() error {
 		parts := strings.Fields(line)
 		cmd := parts[0]
 
-		if cmd == "NICK" {
+		if cmd == "PONG" {
+			c.mu.Lock()
+			c.lastPong = time.Now()
+			if c.pingTimer != nil {
+				c.pingTimer.Stop()
+			}
+			c.mu.Unlock()
+			continue
+		} else if cmd == "NICK" {
 			var nick string
 			if len(parts) < 2 {
 				nick = ""

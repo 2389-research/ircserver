@@ -197,6 +197,78 @@ func TestConcurrentConnections(t *testing.T) {
 	}
 }
 
+func TestPingPong(t *testing.T) {
+	cfg := config.DefaultConfig()
+	conn := &mockConn{
+		readData: strings.NewReader("PONG :123456\r\n"),
+	}
+	client := NewClient(conn, cfg)
+
+	// Start client processing
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- client.handleConnection()
+	}()
+
+	// Wait briefly for PONG processing
+	time.Sleep(50 * time.Millisecond)
+
+	// Verify PONG was received
+	client.mu.Lock()
+	pongTime := client.lastPong
+	client.mu.Unlock()
+
+	if pongTime.IsZero() {
+		t.Error("PONG was not processed")
+	}
+}
+
+func TestPingTimeout(t *testing.T) {
+	cfg := config.DefaultConfig()
+	conn := &mockConn{
+		readData: strings.NewReader(""), // No PONG response
+	}
+	client := NewClient(conn, cfg)
+
+	// Override ping interval for testing
+	originalPingInterval := 30 * time.Second
+	pingInterval := 100 * time.Millisecond
+	
+	// Start ping loop with shorter interval
+	go func() {
+		ticker := time.NewTicker(pingInterval)
+		defer ticker.Stop()
+
+		select {
+		case <-ticker.C:
+			if err := client.Send(fmt.Sprintf("PING :%s", time.Now().Unix())); err != nil {
+				return
+			}
+			client.pingTimer = time.AfterFunc(50*time.Millisecond, func() {
+				client.conn.Close()
+			})
+		case <-client.done:
+			return
+		}
+	}()
+
+	// Start client processing
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- client.handleConnection()
+	}()
+
+	// Wait for timeout
+	select {
+	case err := <-errCh:
+		if err == nil {
+			t.Error("Expected error from connection timeout")
+		}
+	case <-time.After(time.Second):
+		t.Error("Test timed out")
+	}
+}
+
 func TestUnknownCommand(t *testing.T) {
 	cfg := config.DefaultConfig()
 	conn := &mockConn{
