@@ -105,6 +105,7 @@ func (c *Client) handleConnection() error {
 	for {
 		line, err := reader.ReadString('\n')
 		if err != nil {
+			log.Printf("ERROR: Read error for client %s: %v", c.String(), err)
 			return err
 		}
 		

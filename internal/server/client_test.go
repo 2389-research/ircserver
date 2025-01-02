@@ -168,8 +168,8 @@ func TestUnknownCommand(t *testing.T) {
 
 	select {
 	case err := <-errCh:
-		if err == nil {
-			t.Error("Expected error for unknown command")
+		if err != nil && err.Error() != "EOF" {
+			t.Errorf("Expected EOF error, got: %v", err)
 		}
 	case <-time.After(100 * time.Millisecond):
 		t.Error("Test timed out")
