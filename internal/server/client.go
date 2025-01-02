@@ -115,8 +115,9 @@ func (c *Client) pingLoop() {
 		case <-c.done:
 			return
 		case <-ticker.C:
-			// Send PING
-			if err := c.Send(fmt.Sprintf("PING :%d", time.Now().Unix())); err != nil {
+			timestamp := time.Now().Unix()
+			log.Printf("DEBUG: Sending PING to client %s with timestamp %d", c.String(), timestamp)
+			if err := c.Send(fmt.Sprintf("PING :%d", timestamp)); err != nil {
 				log.Printf("ERROR: Failed to send PING to client %s: %v", c.String(), err)
 				c.conn.Close()
 				return
@@ -154,7 +155,8 @@ func (c *Client) handleConnection() error {
 		parts := strings.Fields(line)
 		cmd := parts[0]
 
-		if cmd == "PONG" {
+		switch cmd {
+		case "PONG":
 			c.mu.Lock()
 			c.lastPong = time.Now()
 			if c.pingTimer != nil {
@@ -162,7 +164,8 @@ func (c *Client) handleConnection() error {
 			}
 			c.mu.Unlock()
 			continue
-		} else if cmd == "NICK" {
+			
+		case "NICK":
 			var nick string
 			if len(parts) < 2 {
 				nick = ""
