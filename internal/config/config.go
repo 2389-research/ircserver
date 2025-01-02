@@ -20,8 +20,12 @@ type Config struct {
 		SQLitePath string `yaml:"sqlite_path"`
 	} `yaml:"storage"`
 	IRC struct {
-		DefaultChannel   string `yaml:"default_channel"`
-		MaxMessageLength int    `yaml:"max_message_length"`
+		DefaultChannel    string        `yaml:"default_channel"`
+		MaxMessageLength  int           `yaml:"max_message_length"`
+		ReadTimeout      time.Duration  `yaml:"read_timeout"`
+		WriteTimeout     time.Duration  `yaml:"write_timeout"`
+		MaxBufferSize    int           `yaml:"max_buffer_size"`
+		IdleTimeout      time.Duration  `yaml:"idle_timeout"`
 	} `yaml:"irc"`
 }
 
@@ -36,6 +40,10 @@ func DefaultConfig() *Config {
 	cfg.Storage.SQLitePath = "irc.db"
 	cfg.IRC.DefaultChannel = "#general"
 	cfg.IRC.MaxMessageLength = 512
+	cfg.IRC.ReadTimeout = 300 * time.Second
+	cfg.IRC.WriteTimeout = 60 * time.Second
+	cfg.IRC.MaxBufferSize = 4096
+	cfg.IRC.IdleTimeout = 600 * time.Second
 	return cfg
 }
 

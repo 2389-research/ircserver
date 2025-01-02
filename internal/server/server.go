@@ -99,9 +99,12 @@ func (s *Server) Start() error {
 }
 
 func (s *Server) handleConnection(conn net.Conn) {
-	defer conn.Close()
+	// Set initial connection timeouts
+	conn.SetReadDeadline(time.Now().Add(s.config.IRC.ReadTimeout))
+	conn.SetWriteDeadline(time.Now().Add(s.config.IRC.WriteTimeout))
 
-	client := NewClient(conn)
+	client := NewClient(conn, s.config)
+	defer client.Close()
 	reader := bufio.NewReader(conn)
 
 	// Register client in a thread-safe way
@@ -118,10 +121,27 @@ func (s *Server) handleConnection(conn net.Conn) {
 	}()
 
 	for {
+		// Reset read deadline before each read
+		conn.SetReadDeadline(time.Now().Add(s.config.IRC.ReadTimeout))
+		
 		message, err := reader.ReadString('\n')
 		if err != nil {
+			if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+				log.Printf("INFO: Read timeout for client %s", client)
+			} else {
+				log.Printf("ERROR: Read error for client %s: %v", client, err)
+			}
 			return
 		}
+
+		// Enforce message size limit
+		if len(message) > s.config.IRC.MaxBufferSize {
+			log.Printf("WARN: Oversized message from client %s: %d bytes", client, len(message))
+			client.Send(":server ERROR :Message too long")
+			continue
+		}
+
+		client.UpdateActivity()
 
 		message = strings.TrimSpace(message)
 		s.handleMessage(client, message)
