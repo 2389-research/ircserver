@@ -176,7 +176,7 @@ func TestConcurrentDatabaseAccess(t *testing.T) {
 	wg.Wait()
 
 	var count int
-	err := store.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM users").Scan(&count)
+	err = store.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM users").Scan(&count)
 	if err != nil {
 		t.Fatalf("Failed to count users: %v", err)
 	}
