@@ -100,7 +100,7 @@ func (s *Server) Start() error {
 	}
 }
 
-func (s *Server) handleConnection(conn net.Conn) {
+func (s *Server) handleConnection(conn net.Conn) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -117,7 +117,7 @@ func (s *Server) handleConnection(conn net.Conn) {
 	s.clients[client.String()] = client
 	s.mu.Unlock()
 
-	s.logger.LogEvent(EventConnect, client, "SERVER", 
+	s.logger.LogEvent(ctx, EventConnect, client, "SERVER", 
 		fmt.Sprintf("from %s", conn.RemoteAddr()))
 
 	defer func() {
@@ -149,13 +149,16 @@ func (s *Server) handleConnection(conn net.Conn) {
 		client.UpdateActivity()
 
 		message = strings.TrimSpace(message)
-		s.handleMessage(client, message)
+		if err := s.handleMessage(ctx, client, message); err != nil {
+			log.Printf("ERROR: Failed to handle message from %s: %v", client, err)
+			return err
+		}
 	}
 }
 
 func (s *Server) handleMessage(ctx context.Context, client *Client, message string) error {
 	if message == "" {
-		return
+		return nil
 	}
 
 	parts := strings.SplitN(message, " ", 2)
@@ -229,7 +232,8 @@ func (s *Server) handleUser(client *Client, args string) {
 	client.realname = strings.TrimPrefix(parts[3], ":")
 
 	// Store user info in database
-	if err := s.store.UpdateUser(client.nick, client.username, client.realname, 
+	ctx := context.Background()
+	if err := s.store.UpdateUser(ctx, client.nick, client.username, client.realname, 
 		client.conn.RemoteAddr().String()); err != nil {
 		log.Printf("ERROR: Failed to store user info: %v", err)
 	}
@@ -270,7 +274,8 @@ func (s *Server) handleJoin(client *Client, args string) {
 		channel.AddClient(client)
 		client.channels[channelName] = true
 		
-		s.logger.LogEvent(EventJoin, client, channelName, "")
+		ctx := context.Background()
+		s.logger.LogEvent(ctx, EventJoin, client, channelName, "")
 		
 		if err := s.store.UpdateChannel(channelName, channel.GetTopic()); err != nil {
 			s.logger.LogError("Failed to store channel info", err)

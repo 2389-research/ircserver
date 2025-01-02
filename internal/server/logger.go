@@ -79,15 +79,18 @@ func (l *Logger) LogMessage(from *Client, target, msgType, content string) {
 }
 
 // LogError logs error events
-func (l *Logger) LogError(context string, err error) {
+func (l *Logger) LogError(msg string, err error) {
 	// Log to console
 	timestamp := time.Now().Format("2006-01-02 15:04:05")
 	logMsg := fmt.Sprintf("[%s] ERROR: %s: %v",
-		timestamp, context, err)
+		timestamp, msg, err)
 	log.Printf("%s", logMsg)
 
 	// Store in database
 	if l.store != nil {
-		l.store.LogMessage("SERVER", "ERROR", "ERROR", fmt.Sprintf("%s: %v", context, err))
+		ctx := context.Background()
+		if err := l.store.LogMessage(ctx, "SERVER", "ERROR", "ERROR", fmt.Sprintf("%s: %v", msg, err)); err != nil {
+			log.Printf("Failed to log error: %v", err)
+		}
 	}
 }
