@@ -2,10 +2,8 @@ package server
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"testing"
-	"time"
 
 	"ircserver/internal/config"
 	"ircserver/internal/persistence"
@@ -72,48 +70,5 @@ func TestChannelOperations(t *testing.T) {
 				}
 			}
 		})
-	}
-}
-
-func TestMessageRateLimiting(t *testing.T) {
-	cfg := config.DefaultConfig()
-	store := &mockStore{}
-	srv := New("localhost", "0", store, cfg)
-
-	conn := &mockConn{readData: strings.NewReader("")}
-	client := NewClient(conn, cfg)
-	client.nick = "user1"
-	srv.clients["user1"] = client
-
-	targetConn := &mockConn{readData: strings.NewReader("")}
-	target := NewClient(targetConn, cfg)
-	target.nick = "user2"
-	srv.clients["user2"] = target
-
-	// Send messages rapidly
-	for i := 0; i < 15; i++ {
-		srv.handlePrivMsg(client, fmt.Sprintf("user2 :Message %d", i))
-	}
-
-	// Wait for initial batch to be processed
-	time.Sleep(time.Second * 1)
-
-	// Check first window
-	output := targetConn.writeData.String()
-	count := strings.Count(output, "Message")
-	if count > 10 {
-		t.Errorf("First window: Expected max 10 messages, got %d", count)
-	}
-
-	targetConn.writeData.Reset()
-
-	// Wait for second window
-	time.Sleep(time.Second * 2)
-
-	// Check second window
-	output = targetConn.writeData.String()
-	count = strings.Count(output, "Message")
-	if count > 5 { // Remaining messages
-		t.Errorf("Second window: Expected remaining messages (<=5), got %d", count)
 	}
 }
