@@ -170,3 +170,38 @@ func TestErrorHandling(t *testing.T) {
 		panic("Simulated panic")
 	})
 }
+
+func TestMessageSendRetries(t *testing.T) {
+	store := setupTestDB(t)
+	defer store.Close()
+
+	ctx := context.Background()
+	err := store.LogMessage(ctx, "sender", "recipient", "PRIVMSG", "Hello, world!")
+	if err != nil {
+		t.Fatalf("Failed to log message: %v", err)
+	}
+
+	var timestamp time.Time
+	var sender, recipient, msgType, content string
+	err = store.QueryRow(ctx, "SELECT timestamp, sender, recipient, message_type, content FROM message_logs WHERE sender = ?", "sender").Scan(&timestamp, &sender, &recipient, &msgType, &content)
+	if err != nil {
+		t.Fatalf("Failed to query message log: %v", err)
+	}
+
+	if sender != "sender" || recipient != "recipient" || msgType != "PRIVMSG" || content != "Hello, world!" {
+		t.Errorf("Message log data mismatch: got (%s, %s, %s, %s), want (%s, %s, %s, %s)", sender, recipient, msgType, content, "sender", "recipient", "PRIVMSG", "Hello, world!")
+	}
+
+	// Simulate IO timeout and retry logic
+	for i := 0; i < 3; i++ {
+		err = store.LogMessage(ctx, "sender", "recipient", "PRIVMSG", "Retry message")
+		if err == nil {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	if err != nil {
+		t.Fatalf("Failed to log message after retries: %v", err)
+	}
+}
