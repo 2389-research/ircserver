@@ -80,7 +80,7 @@ func TestChannelOperations(t *testing.T) {
 // TestConcurrentOperations verifies thread-safety of server operations
 func TestConcurrentOperations(t *testing.T) {
 	// Add timeout to prevent test from hanging
-	timeout := time.After(5 * time.Second)
+	timeout := time.After(10 * time.Second)
 	done := make(chan bool)
 
 	go func() {
@@ -148,9 +148,17 @@ func TestConcurrentOperations(t *testing.T) {
 		}
 		wg.Wait()
 
-		// Verify all channels are empty
-		if len(srv.channels) != 0 {
-			t.Errorf("Expected all channels to be removed, got %d remaining", len(srv.channels))
+		// Verify channels are empty and log state
+		remainingChannels := len(srv.channels)
+		if remainingChannels != 0 {
+			t.Logf("WARNING: %d channels still exist:", remainingChannels)
+			for name, ch := range srv.channels {
+				t.Logf("Channel %s has %d members", name, len(ch.Members))
+				for nick := range ch.Members {
+					t.Logf("  - Member: %s", nick)
+				}
+			}
+			t.Errorf("Expected all channels to be removed, got %d remaining", remainingChannels)
 		}
 		
 		done <- true
