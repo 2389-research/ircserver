@@ -148,13 +148,13 @@ func TestConcurrentDatabaseAccess(t *testing.T) {
 
 	// Verify tables exist by checking the schema
 	var tableName string
-	err := store.db.QueryRowContext(ctx, "SELECT name FROM sqlite_master WHERE type='table' AND name='users'").Scan(&tableName)
+	err = store.db.QueryRowContext(ctx, "SELECT name FROM sqlite_master WHERE type='table' AND name='users'").Scan(&tableName)
 	if err != nil {
 		t.Fatalf("Failed to verify users table exists: %v", err)
 	}
 
 	// Initialize with test data
-	if err := store.UpdateUser(ctx, "init", "init", "Initial User", "127.0.0.1"); err != nil {
+	if err = store.UpdateUser(ctx, "init", "init", "Initial User", "127.0.0.1"); err != nil {
 		t.Fatalf("Failed to initialize database: %v", err)
 	}
 
