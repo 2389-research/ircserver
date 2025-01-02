@@ -136,7 +136,7 @@ func (s *Server) handleConnection(conn net.Conn) error {
 			} else {
 				log.Printf("ERROR: Read error for client %s: %v", client, err)
 			}
-			return
+			return fmt.Errorf("read error: %w", err)
 		}
 
 		// Enforce message size limit
@@ -192,6 +192,7 @@ func (s *Server) handleMessage(ctx context.Context, client *Client, message stri
 	default:
 		log.Printf("WARN: Unknown command from %s: %s", client, command)
 	}
+	return nil
 }
 
 func (s *Server) handleNick(client *Client, args string) error {
@@ -278,7 +279,6 @@ func (s *Server) handleJoin(client *Client, args string) {
 		ctx := context.Background()
 		s.logger.LogEvent(ctx, EventJoin, client, channelName, "")
 		
-		ctx := context.Background()
 		if err := s.store.UpdateChannel(ctx, channelName, channel.GetTopic()); err != nil {
 			s.logger.LogError("Failed to store channel info", err)
 		}
