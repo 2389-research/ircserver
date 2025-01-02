@@ -140,8 +140,6 @@ func (ws *WebServer) handleAPISend(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ws.ircServer.deliverMessage(adminClient, msg.Target, "PRIVMSG", msg.Content)
-	ws.AddMessage("WebAdmin", msg.Target, "PRIVMSG", msg.Content)
-
 	w.WriteHeader(http.StatusOK)
 }
 
