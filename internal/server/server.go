@@ -287,12 +287,12 @@ func (s *Server) removeClient(client *Client) {
 	defer s.mu.Unlock()
 
 	// Remove from channels
-	for channel := range client.channels {
-		if s.channels[channel] != nil {
-			delete(s.channels[channel], client.nick)
+	for channelName := range client.channels {
+		if channel := s.channels[channelName]; channel != nil {
+			channel.RemoveClient(client.nick)
 			// If channel is empty, remove it
-			if len(s.channels[channel]) == 0 {
-				delete(s.channels, channel)
+			if len(channel.GetClients()) == 0 {
+				delete(s.channels, channelName)
 			}
 		}
 	}
