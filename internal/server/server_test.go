@@ -120,15 +120,24 @@ func TestJoinResponseMessages(t *testing.T) {
 func TestChannelMultiUserOperations(t *testing.T) {
 	cfg := config.DefaultConfig()
 	store := &mockStore{}
-	srv := New("localhost", "0", store, cfg)
-
-	clients := make([]*Client, 3)
-	conns := make([]*mockConn, 3)
-	for i := range clients {
-		conns[i] = &mockConn{readData: strings.NewReader("")}
-		clients[i] = NewClient(conns[i], cfg)
-		clients[i].nick = fmt.Sprintf("user%d", i+1)
+	
+	// Create fresh server and clients for each subtest
+	var srv *Server
+	var clients []*Client
+	var conns []*mockConn
+	
+	setup := func() {
+		srv = New("localhost", "0", store, cfg)
+		clients = make([]*Client, 3)
+		conns = make([]*mockConn, 3)
+		for i := range clients {
+			conns[i] = &mockConn{readData: strings.NewReader("")}
+			clients[i] = NewClient(conns[i], cfg)
+			clients[i].nick = fmt.Sprintf("user%d", i+1)
+		}
 	}
+
+	setup()
 
 	// Test multiple users joining
 	for _, client := range clients {
@@ -156,6 +165,7 @@ func TestChannelMultiUserOperations(t *testing.T) {
 
 	// Test PART error cases
 	t.Run("part non-existent channel", func(t *testing.T) {
+		setup() // Reset state
 		srv.handlePart(clients[0], "#nonexistent")
 		if !strings.Contains(conns[0].writeData.String(), "403") {
 			t.Error("Expected error response for non-existent channel")
@@ -163,9 +173,7 @@ func TestChannelMultiUserOperations(t *testing.T) {
 	})
 
 	t.Run("part channel not joined", func(t *testing.T) {
-		// Clear previous messages
-		conns[0].writeData.Reset()
-		conns[1].writeData.Reset()
+		setup() // Reset state
 		
 		// First client creates and joins #test2
 		srv.handleJoin(clients[0], "#test2")
