@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -20,12 +21,12 @@ type Config struct {
 		SQLitePath string `yaml:"sqlite_path"`
 	} `yaml:"storage"`
 	IRC struct {
-		DefaultChannel    string        `yaml:"default_channel"`
-		MaxMessageLength  int           `yaml:"max_message_length"`
-		ReadTimeout      time.Duration  `yaml:"read_timeout"`
-		WriteTimeout     time.Duration  `yaml:"write_timeout"`
+		DefaultChannel   string        `yaml:"default_channel"`
+		MaxMessageLength int           `yaml:"max_message_length"`
+		ReadTimeout      time.Duration `yaml:"read_timeout"`
+		WriteTimeout     time.Duration `yaml:"write_timeout"`
 		MaxBufferSize    int           `yaml:"max_buffer_size"`
-		IdleTimeout      time.Duration  `yaml:"idle_timeout"`
+		IdleTimeout      time.Duration `yaml:"idle_timeout"`
 	} `yaml:"irc"`
 }
 
