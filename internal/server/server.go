@@ -268,10 +268,6 @@ func (s *Server) handleJoin(client *Client, args string) {
 	channels := strings.Split(args, ",")
 	for _, channelName := range channels {
 		channelName = strings.TrimSpace(channelName)
-		if !strings.HasPrefix(channelName, "#") {
-			channelName = "#" + channelName
-		}
-
 		// Validate channel name
 		if !isValidChannelName(channelName) {
 			client.Send(fmt.Sprintf(":server 403 %s %s :Invalid channel name", client.nick, channelName))
