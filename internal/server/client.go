@@ -181,7 +181,7 @@ func (c *Client) String() string {
 	return c.nick
 }
 func (c *Client) processMessageQueue() {
-	ticker := time.NewTicker(time.Second) // Check queue every second
+	ticker := time.NewTicker(time.Second / 10) // Process queue more frequently
 	defer ticker.Stop()
 
 	for {
@@ -190,22 +190,28 @@ func (c *Client) processMessageQueue() {
 			return
 		case msg := <-c.msgQueue:
 			c.mu.Lock()
+			now := time.Now()
 			// Reset rate limit if window has expired
-			if time.Since(c.lastMsg) > time.Second*2 {
+			if now.Sub(c.lastMsg) > time.Second*2 {
 				c.msgCount = 0
-				c.lastMsg = time.Now()
+				c.lastMsg = now
 			}
 			
 			// Check rate limit
 			if c.msgCount < 10 { // Max 10 messages per 2 seconds
 				if _, err := c.writer.WriteString(msg + "\r\n"); err == nil {
-					c.writer.Flush()
-					c.msgCount++
+					err = c.writer.Flush()
+					if err == nil {
+						c.msgCount++
+					} else {
+						log.Printf("ERROR: Failed to flush message to client %s: %v", c.String(), err)
+					}
+				} else {
+					log.Printf("ERROR: Failed to write message to client %s: %v", c.String(), err)
 				}
 			}
 			c.mu.Unlock()
 		case <-ticker.C:
-			// Reset counters periodically
 			c.mu.Lock()
 			if time.Since(c.lastMsg) > time.Second*2 {
 				c.msgCount = 0
