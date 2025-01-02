@@ -43,6 +43,9 @@ func TestChannelOperations(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// Reset server state
+			srv = New("localhost", "0", store, cfg)
+			
 			client := NewClient(&mockConn{readData: strings.NewReader("")}, cfg)
 			client.nick = "user1"
 			

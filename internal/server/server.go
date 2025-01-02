@@ -271,6 +271,12 @@ func (s *Server) handleJoin(client *Client, args string) {
 			channelName = "#" + channelName
 		}
 
+		// Validate channel name
+		if !isValidChannelName(channelName) {
+			client.Send(fmt.Sprintf(":server 403 %s %s :Invalid channel name", client.nick, channelName))
+			continue
+		}
+
 		s.mu.Lock()
 		channel, exists := s.channels[channelName]
 		if !exists {
