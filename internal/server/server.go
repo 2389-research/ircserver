@@ -416,17 +416,10 @@ func (s *Server) handlePart(client *Client, args string) {
 			continue
 		}
 
-		// Get list of remaining clients before removing this one
-		remainingClients := channel.GetClients()
-
-		// Send PART message before removing the client
+		// Send PART message to all clients in the channel (including the leaving client)
 		partMsg := fmt.Sprintf(":%s PART %s", client, channelName)
-		for _, c := range remainingClients {
-			if c.nick != client.nick {
-				if err := c.Send(partMsg); err != nil {
-					log.Printf("ERROR: Failed to send PART notification to %s: %v", c.nick, err)
-				}
-			}
+		if err := s.broadcastToChannel(channelName, partMsg); err != nil {
+			log.Printf("ERROR: Failed to broadcast PART message: %v", err)
 		}
 
 		// Remove client from channel
@@ -439,8 +432,8 @@ func (s *Server) handlePart(client *Client, args string) {
 			log.Printf("ERROR: Failed to log part event: %v", err)
 		}
 
-		// Check if channel is now empty
-		if len(channel.GetClients()) == 0 {
+		// Check if channel is now empty after removing the client
+		if len(channel.Clients) == 0 {
 			delete(s.channels, channelName)
 			if err := s.logger.LogEvent(ctx, EventChannelDelete, client, channelName, "Channel removed - last user left"); err != nil {
 				log.Printf("ERROR: Failed to log channel deletion: %v", err)
