@@ -1,5 +1,7 @@
 package persistence
 
+import "context"
+
 // Store defines the interface for persistence operations
 type Store interface {
 	// Close closes the underlying database connection
