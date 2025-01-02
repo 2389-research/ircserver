@@ -60,7 +60,9 @@ func (s *Server) Shutdown() error {
 	// Notify all clients
 	s.mu.RLock()
 	for _, client := range s.clients {
-		client.Send("ERROR :Server shutting down")
+		if err := client.Send("ERROR :Server shutting down"); err != nil {
+			log.Printf("ERROR: Failed to send shutdown message to client: %v", err)
+		}
 		client.conn.Close()
 	}
 	s.mu.RUnlock()
@@ -97,7 +99,11 @@ func (s *Server) Start() error {
 				continue
 			}
 
-			go s.handleConnection(conn)
+			go func(conn net.Conn) {
+				if err := s.handleConnection(conn); err != nil {
+					log.Printf("ERROR: Connection handler error: %v", err)
+				}
+			}(conn)
 		}
 	}
 }
@@ -107,8 +113,12 @@ func (s *Server) handleConnection(conn net.Conn) error {
 	defer cancel()
 
 	// Set initial connection timeouts
-	conn.SetReadDeadline(time.Now().Add(s.config.IRC.ReadTimeout))
-	conn.SetWriteDeadline(time.Now().Add(s.config.IRC.WriteTimeout))
+	if err := conn.SetReadDeadline(time.Now().Add(s.config.IRC.ReadTimeout)); err != nil {
+		return fmt.Errorf("failed to set read deadline: %w", err)
+	}
+	if err := conn.SetWriteDeadline(time.Now().Add(s.config.IRC.WriteTimeout)); err != nil {
+		return fmt.Errorf("failed to set write deadline: %w", err)
+	}
 
 	client := NewClient(conn, s.config)
 	defer client.Close()
@@ -119,8 +129,10 @@ func (s *Server) handleConnection(conn net.Conn) error {
 	s.clients[client.String()] = client
 	s.mu.Unlock()
 
-	s.logger.LogEvent(ctx, EventConnect, client, "SERVER",
-		fmt.Sprintf("from %s", conn.RemoteAddr()))
+	if err := s.logger.LogEvent(ctx, EventConnect, client, "SERVER",
+		fmt.Sprintf("from %s", conn.RemoteAddr())); err != nil {
+		log.Printf("ERROR: Failed to log connect event: %v", err)
+	}
 
 	defer func() {
 		s.removeClient(client)
@@ -129,7 +141,10 @@ func (s *Server) handleConnection(conn net.Conn) error {
 
 	for {
 		// Reset read deadline before each read
-		conn.SetReadDeadline(time.Now().Add(s.config.IRC.ReadTimeout))
+		if err := conn.SetReadDeadline(time.Now().Add(s.config.IRC.ReadTimeout)); err != nil {
+			log.Printf("ERROR: Failed to set read deadline: %v", err)
+			return fmt.Errorf("failed to set read deadline: %w", err)
+		}
 
 		message, err := reader.ReadString('\n')
 		if err != nil {
@@ -144,7 +159,9 @@ func (s *Server) handleConnection(conn net.Conn) error {
 		// Enforce message size limit
 		if len(message) > s.config.IRC.MaxBufferSize {
 			log.Printf("WARN: Oversized message from client %s: %d bytes", client, len(message))
-			client.Send(":server ERROR :Message too long")
+			if err := client.Send(":server ERROR :Message too long"); err != nil {
+				log.Printf("ERROR: Failed to send message size error: %v", err)
+			}
 			continue
 		}
 
@@ -172,7 +189,9 @@ func (s *Server) handleMessage(ctx context.Context, client *Client, message stri
 
 	switch command {
 	case "NICK":
-		s.handleNick(client, args)
+		if err := s.handleNick(client, args); err != nil {
+			log.Printf("ERROR: Failed to handle NICK command: %v", err)
+		}
 	case "USER":
 		s.handleUser(client, args)
 	case "QUIT":
@@ -201,7 +220,9 @@ func (s *Server) handleNick(client *Client, args string) error {
 	newNick := strings.TrimSpace(args)
 	if newNick == "" {
 		err := NewError(ErrNoNicknameGiven, "No nickname given", nil)
-		client.Send(fmt.Sprintf(":server %s", err.Error()))
+		if err := client.Send(fmt.Sprintf(":server %s", err.Error())); err != nil {
+			log.Printf("ERROR: Failed to send error message: %v", err)
+		}
 		return err
 	}
 
@@ -281,7 +302,9 @@ func (s *Server) handleJoin(client *Client, args string) {
 		client.channels[channelName] = true
 
 		ctx := context.Background()
-		s.logger.LogEvent(ctx, EventJoin, client, channelName, "")
+		if err := s.logger.LogEvent(ctx, EventJoin, client, channelName, ""); err != nil {
+			log.Printf("ERROR: Failed to log join event: %v", err)
+		}
 
 		if err := s.store.UpdateChannel(ctx, channelName, channel.GetTopic()); err != nil {
 			s.logger.LogError("Failed to store channel info", err)
@@ -406,7 +429,9 @@ func (s *Server) handleTopic(client *Client, args string) {
 
 	// Log the topic change
 	ctx := context.Background()
-	s.logger.LogEvent(ctx, EventTopic, client, channelName, newTopic)
+	if err := s.logger.LogEvent(ctx, EventTopic, client, channelName, newTopic); err != nil {
+		log.Printf("ERROR: Failed to log topic event: %v", err)
+	}
 }
 
 func (s *Server) handleWho(client *Client, args string) {
@@ -462,16 +487,22 @@ func (s *Server) deliverMessage(from *Client, target, msgType, message string) {
 			s.broadcastToChannel(target, fmt.Sprintf(":%s %s %s :%s", from, msgType, target, message))
 		} else {
 			s.mu.RUnlock()
-			from.Send(fmt.Sprintf(":server 403 %s %s :No such channel", from.nick, target))
+			if err := from.Send(fmt.Sprintf(":server 403 %s %s :No such channel", from.nick, target)); err != nil {
+				log.Printf("ERROR: Failed to send no such channel error: %v", err)
+			}
 		}
 	} else {
 		s.mu.RLock()
 		if to, exists := s.clients[target]; exists {
 			s.mu.RUnlock()
-			to.Send(fmt.Sprintf(":%s %s %s :%s", from, msgType, target, message))
+			if err := to.Send(fmt.Sprintf(":%s %s %s :%s", from, msgType, target, message)); err != nil {
+				log.Printf("ERROR: Failed to deliver message to %s: %v", target, err)
+			}
 		} else {
 			s.mu.RUnlock()
-			from.Send(fmt.Sprintf(":server 401 %s %s :No such nick/channel", from.nick, target))
+			if err := from.Send(fmt.Sprintf(":server 401 %s %s :No such nick/channel", from.nick, target)); err != nil {
+				log.Printf("ERROR: Failed to send no such nick error: %v", err)
+			}
 		}
 	}
 }

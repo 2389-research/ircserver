@@ -72,7 +72,11 @@ func (ws *WebServer) Start(addr string) error {
 }
 
 func (ws *WebServer) handleDashboard(w http.ResponseWriter, r *http.Request) {
-	ws.templates.ExecuteTemplate(w, "dashboard.html", nil)
+	if err := ws.templates.ExecuteTemplate(w, "dashboard.html", nil); err != nil {
+		http.Error(w, "Failed to render template", http.StatusInternalServerError)
+		log.Printf("ERROR: Failed to execute template: %v", err)
+		return
+	}
 }
 
 func (ws *WebServer) handleAPIData(w http.ResponseWriter, r *http.Request) {
@@ -82,7 +86,11 @@ func (ws *WebServer) handleAPIData(w http.ResponseWriter, r *http.Request) {
 	data := ws.collectDashboardData()
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(data)
+	if err := json.NewEncoder(w).Encode(data); err != nil {
+		http.Error(w, "Failed to encode JSON response", http.StatusInternalServerError)
+		log.Printf("ERROR: Failed to encode JSON: %v", err)
+		return
+	}
 }
 
 func (ws *WebServer) AddMessage(from, to, msgType, content string) {
