@@ -163,10 +163,24 @@ func TestChannelMultiUserOperations(t *testing.T) {
 	})
 
 	t.Run("part channel not joined", func(t *testing.T) {
+		// Clear previous messages
+		conns[0].writeData.Reset()
+		conns[1].writeData.Reset()
+		
+		// First client creates and joins #test2
 		srv.handleJoin(clients[0], "#test2")
+		
+		// Verify channel exists and first client joined
+		if _, exists := srv.channels["#test2"]; !exists {
+			t.Fatal("Channel #test2 was not created")
+		}
+		
+		// Try to part with second client who never joined
 		srv.handlePart(clients[1], "#test2")
-		if !strings.Contains(conns[1].writeData.String(), "442") {
-			t.Error("Expected error response for parting channel not joined")
+		
+		output := conns[1].writeData.String()
+		if !strings.Contains(output, "442") {
+			t.Errorf("Expected error 442 for parting channel not joined, got: %s", output)
 		}
 	})
 
