@@ -649,7 +649,6 @@ func (s *Server) deliverMessage(from *Client, target, msgType, message string) {
 		
 		// Send to all clients in channel except sender
 		channel.mu.RLock()
-		channel.mu.RLock()
 		members := channel.GetMembers()
 		channel.mu.RUnlock()
 		for _, member := range members {
@@ -660,7 +659,6 @@ func (s *Server) deliverMessage(from *Client, target, msgType, message string) {
 				}
 			}
 		}
-		channel.mu.RUnlock()
 	} else {
 		to, exists := s.clients[target]
 		if !exists {
@@ -694,11 +692,13 @@ func (s *Server) broadcastToChannel(channelName string, message string) error {
 	members := channel.GetMembers()
 	for _, member := range members {
 		client := member.Client
-		if err := client.Send(message); err != nil {
-			if firstErr == nil {
-				firstErr = fmt.Errorf("failed to broadcast to %s: %w", client.String(), err)
+		if client.nick != message {
+			if err := client.Send(message); err != nil {
+				if firstErr == nil {
+					firstErr = fmt.Errorf("failed to broadcast to %s: %w", client.String(), err)
+				}
+				log.Printf("ERROR: Failed to send message to client %s: %v", client.String(), err)
 			}
-			log.Printf("ERROR: Failed to send message to client %s: %v", client.String(), err)
 		}
 	}
 	return firstErr

@@ -73,3 +73,33 @@ func TestChannelOperations(t *testing.T) {
 		})
 	}
 }
+
+func TestMessageEchoPrevention(t *testing.T) {
+	cfg := config.DefaultConfig()
+	store := &mockStore{}
+	srv := New("localhost", "0", store, cfg)
+
+	client1 := NewClient(&mockConn{readData: strings.NewReader("")}, cfg)
+	client1.nick = "user1"
+	client2 := NewClient(&mockConn{readData: strings.NewReader("")}, cfg)
+	client2.nick = "user2"
+
+	srv.clients[client1.nick] = client1
+	srv.clients[client2.nick] = client2
+
+	channelName := "#test"
+	srv.channels[channelName] = NewChannel(channelName)
+	srv.channels[channelName].AddClient(client1, UserModeNormal)
+	srv.channels[channelName].AddClient(client2, UserModeNormal)
+
+	message := "Hello, world!"
+	srv.deliverMessage(client1, channelName, "PRIVMSG", message)
+
+	if strings.Contains(client1.conn.(*mockConn).writeData.String(), message) {
+		t.Errorf("Expected message not to be echoed back to the sender")
+	}
+
+	if !strings.Contains(client2.conn.(*mockConn).writeData.String(), message) {
+		t.Errorf("Expected message to be delivered to other users")
+	}
+}
