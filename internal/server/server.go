@@ -146,6 +146,12 @@ func (s *Server) handleUser(client *Client, args string) {
 	client.username = parts[0]
 	client.realname = strings.TrimPrefix(parts[3], ":")
 
+	// Store user info in database
+	if err := s.store.UpdateUser(client.nick, client.username, client.realname, 
+		client.conn.RemoteAddr().String()); err != nil {
+		log.Printf("ERROR: Failed to store user info: %v", err)
+	}
+
 	// Send welcome messages
 	welcomeMsg := fmt.Sprintf(":server 001 %s :Welcome to the IRC Network %s!%s@%s",
 		client.nick, client.nick, client.username, client.conn.RemoteAddr().String())
@@ -181,6 +187,12 @@ func (s *Server) handleJoin(client *Client, args string) {
 		}
 		channel.AddClient(client)
 		client.channels[channelName] = true
+		
+		// Store channel info in database
+		if err := s.store.UpdateChannel(channelName, channel.GetTopic()); err != nil {
+			log.Printf("ERROR: Failed to store channel info: %v", err)
+		}
+		
 		s.mu.Unlock()
 
 		// Send JOIN message to all clients in the channel
@@ -239,6 +251,12 @@ func (s *Server) handlePrivMsg(client *Client, args string) {
 
 	target := parts[0]
 	message := strings.TrimPrefix(parts[1], ":")
+	
+	// Log the message
+	if err := s.store.LogMessage(client.nick, target, "PRIVMSG", message); err != nil {
+		log.Printf("ERROR: Failed to log message: %v", err)
+	}
+	
 	s.deliverMessage(client, target, "PRIVMSG", message)
 }
 
@@ -250,6 +268,12 @@ func (s *Server) handleNotice(client *Client, args string) {
 
 	target := parts[0]
 	message := strings.TrimPrefix(parts[1], ":")
+	
+	// Log the notice
+	if err := s.store.LogMessage(client.nick, target, "NOTICE", message); err != nil {
+		log.Printf("ERROR: Failed to log notice: %v", err)
+	}
+	
 	s.deliverMessage(client, target, "NOTICE", message)
 }
 
