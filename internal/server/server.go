@@ -109,6 +109,8 @@ func (s *Server) handleMessage(client *Client, message string) {
 		s.handlePing(client, args)
 	case "WHO":
 		s.handleWho(client, args)
+	case "TOPIC":
+		s.handleTopic(client, args)
 	default:
 		log.Printf("WARN: Unknown command from %s: %s", client, command)
 	}
@@ -278,6 +280,45 @@ func (s *Server) handleNotice(client *Client, args string) {
 
 func (s *Server) handlePing(client *Client, args string) {
 	client.Send(fmt.Sprintf("PONG :%s", args))
+}
+
+func (s *Server) handleTopic(client *Client, args string) {
+	parts := strings.SplitN(args, " ", 2)
+	if len(parts) < 1 {
+		client.Send(":server 461 TOPIC :Not enough parameters")
+		return
+	}
+
+	channelName := parts[0]
+	s.mu.RLock()
+	channel, exists := s.channels[channelName]
+	s.mu.RUnlock()
+
+	if !exists {
+		client.Send(fmt.Sprintf(":server 403 %s %s :No such channel", client.nick, channelName))
+		return
+	}
+
+	// If no topic is provided, show the current topic
+	if len(parts) == 1 {
+		topic := channel.GetTopic()
+		if topic == "" {
+			client.Send(fmt.Sprintf(":server 331 %s %s :No topic is set", client.nick, channelName))
+		} else {
+			client.Send(fmt.Sprintf(":server 332 %s %s :%s", client.nick, channelName, topic))
+		}
+		return
+	}
+
+	// Set new topic
+	newTopic := strings.TrimPrefix(parts[1], ":")
+	channel.SetTopic(newTopic)
+	
+	// Broadcast the topic change to all channel members
+	s.broadcastToChannel(channelName, fmt.Sprintf(":%s TOPIC %s :%s", client, channelName, newTopic))
+	
+	// Log the topic change
+	s.logger.LogEvent(EventTopic, client, channelName, newTopic)
 }
 
 func (s *Server) handleWho(client *Client, args string) {
