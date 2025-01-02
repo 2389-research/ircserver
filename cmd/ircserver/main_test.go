@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"ircserver/internal/persistence"
+	"ircserver/internal/server"
 )
 
 func TestGetEnv(t *testing.T) {
@@ -203,5 +204,46 @@ func TestMessageSendRetries(t *testing.T) {
 
 	if err != nil {
 		t.Fatalf("Failed to log message after retries: %v", err)
+	}
+}
+
+func TestSysopMessageOnShutdown(t *testing.T) {
+	// Setup test server
+	cfg := config.DefaultConfig()
+	store := setupTestDB(t)
+	defer store.Close()
+
+	srv := server.New("localhost", "6667", store, cfg)
+
+	// Start server in a goroutine
+	go func() {
+		if err := srv.Start(); err != nil {
+			t.Fatalf("Failed to start server: %v", err)
+		}
+	}()
+
+	// Simulate client connection
+	conn, err := net.Dial("tcp", "localhost:6667")
+	if err != nil {
+		t.Fatalf("Failed to connect to server: %v", err)
+	}
+	defer conn.Close()
+
+	// Simulate server shutdown
+	if err := srv.Shutdown(); err != nil {
+		t.Fatalf("Failed to shutdown server: %v", err)
+	}
+
+	// Read from connection to verify sysop message
+	buf := make([]byte, 1024)
+	n, err := conn.Read(buf)
+	if err != nil {
+		t.Fatalf("Failed to read from connection: %v", err)
+	}
+
+	message := string(buf[:n])
+	expectedMessage := "NOTICE @testuser :Server is shutting down. Please disconnect."
+	if !strings.Contains(message, expectedMessage) {
+		t.Errorf("Expected sysop message %q, got %q", expectedMessage, message)
 	}
 }

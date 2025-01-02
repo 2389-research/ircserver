@@ -94,6 +94,9 @@ func main() {
 	sig := <-sigChan
 	log.Printf("INFO: Received signal %v, initiating shutdown...", sig)
 
+	// Send sysop level message to clients about server shutdown
+	srv.SendSysopMessage("Server is shutting down. Please disconnect.")
+
 	// Graceful shutdown
 	if err := srv.Shutdown(); err != nil {
 		log.Printf("ERROR: Shutdown error: %v", err)

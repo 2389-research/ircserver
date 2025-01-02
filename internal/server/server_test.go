@@ -73,3 +73,29 @@ func TestChannelOperations(t *testing.T) {
 		})
 	}
 }
+
+func TestSendSysopMessage(t *testing.T) {
+	cfg := config.DefaultConfig()
+	store := &mockStore{}
+	srv := New("localhost", "0", store, cfg)
+
+	client1 := NewClient(&mockConn{readData: strings.NewReader("")}, cfg)
+	client1.nick = "user1"
+	client2 := NewClient(&mockConn{readData: strings.NewReader("")}, cfg)
+	client2.nick = "user2"
+
+	srv.clients[client1.nick] = client1
+	srv.clients[client2.nick] = client2
+
+	srv.SendSysopMessage("Server is shutting down. Please disconnect.")
+
+	expectedMessage := "NOTICE @user1 :Server is shutting down. Please disconnect."
+	if !strings.Contains(client1.conn.(*mockConn).writeData.String(), expectedMessage) {
+		t.Errorf("Expected sysop message %q, got %q", expectedMessage, client1.conn.(*mockConn).writeData.String())
+	}
+
+	expectedMessage = "NOTICE @user2 :Server is shutting down. Please disconnect."
+	if !strings.Contains(client2.conn.(*mockConn).writeData.String(), expectedMessage) {
+		t.Errorf("Expected sysop message %q, got %q", expectedMessage, client2.conn.(*mockConn).writeData.String())
+	}
+}

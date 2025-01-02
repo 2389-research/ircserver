@@ -50,6 +50,9 @@ func New(host, port string, store persistence.Store, cfg *config.Config) *Server
 func (s *Server) Shutdown() error {
 	close(s.shutdown)
 
+	// Send sysop level message to clients about server shutdown
+	s.SendSysopMessage("Server is shutting down. Please disconnect.")
+
 	// Close listener
 	if s.listener != nil {
 		if err := s.listener.Close(); err != nil {
@@ -322,7 +325,7 @@ func (s *Server) handleJoin(client *Client, args string) {
 	channelNames := strings.Split(args, ",")
 	for _, name := range channelNames {
 		name = strings.TrimSpace(name)
-		if !isValidChannelName(name) || strings.Contains(name, ",") {
+		if !isValidChannelName(name) || strings.contains(name, ",") {
 			if err := client.Send(fmt.Sprintf(":server 403 %s %s :Invalid channel name", client.nick, name)); err != nil {
 				log.Printf("ERROR: Failed to send invalid channel name error: %v", err)
 			}
@@ -753,5 +756,17 @@ func (s *Server) removeClient(client *Client) {
 	// Remove from clients list
 	if client.nick != "" {
 		delete(s.clients, client.nick)
+	}
+}
+
+// SendSysopMessage sends a sysop level message to all clients.
+func (s *Server) SendSysopMessage(message string) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	for _, client := range s.clients {
+		if err := client.Send(fmt.Sprintf("NOTICE @%s :%s", client.nick, message)); err != nil {
+			log.Printf("ERROR: Failed to send sysop message to client %s: %v", client.nick, err)
+		}
 	}
 }
