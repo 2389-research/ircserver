@@ -196,7 +196,9 @@ func (ws *WebServer) collectDashboardData() DashboardData {
 	for name, channel := range channelsCopy {
 		channel.mu.RLock()
 		users := make([]string, 0, len(channel.Clients))
-		for _, client := range channel.Clients {
+		members := channel.GetMembers()
+		for _, member := range members {
+			client := member.Client
 			users = append(users, client.nick)
 		}
 

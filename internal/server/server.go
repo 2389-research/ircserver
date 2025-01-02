@@ -339,7 +339,7 @@ func (s *Server) handleJoin(client *Client, args string) {
 			channel = NewChannel(channelName)
 			s.channels[channelName] = channel
 		}
-		channel.AddClient(client)
+		channel.AddClient(client, UserModeNormal)
 		client.channels[channelName] = true
 
 		ctx := context.Background()
@@ -373,7 +373,8 @@ func (s *Server) handleJoin(client *Client, args string) {
 
 		// Send list of users in channel
 		names := []string{}
-		for _, c := range channel.GetClients() {
+		for _, member := range channel.GetMembers() {
+			c := member.Client
 			names = append(names, c.nick)
 		}
 		if err := client.Send(fmt.Sprintf(":server 353 %s = %s :%s", client.nick, channelName, strings.Join(names, " "))); err != nil {
@@ -408,7 +409,7 @@ func (s *Server) handlePart(client *Client, args string) {
 		}
 
 		// Check if client is actually in the channel
-		if !channel.HasClient(client.nick) {
+		if !channel.HasMember(client.nick) {
 			s.mu.Unlock()
 			if err := client.Send(fmt.Sprintf(":server 442 %s %s :You're not on that channel", client.nick, channelName)); err != nil {
 				log.Printf("ERROR: Failed to send not on channel error: %v", err)
@@ -417,7 +418,7 @@ func (s *Server) handlePart(client *Client, args string) {
 		}
 
 		// Check if client is actually in the channel
-		if !channel.HasClient(client.nick) {
+		if !channel.HasMember(client.nick) {
 			s.mu.Unlock()
 			if err := client.Send(fmt.Sprintf(":server 442 %s %s :You're not on that channel", client.nick, channelName)); err != nil {
 				log.Printf("ERROR: Failed to send not on channel error: %v", err)
@@ -442,7 +443,7 @@ func (s *Server) handlePart(client *Client, args string) {
 		}
 
 		// Check if channel is now empty after removing the client
-		if len(channel.Clients) == 0 {
+		if channel.IsEmpty() {
 			delete(s.channels, channelName)
 			if err := s.logger.LogEvent(ctx, EventChannelDelete, client, channelName, "Channel removed - last user left"); err != nil {
 				log.Printf("ERROR: Failed to log channel deletion: %v", err)
@@ -648,7 +649,11 @@ func (s *Server) deliverMessage(from *Client, target, msgType, message string) {
 		
 		// Send to all clients in channel except sender
 		channel.mu.RLock()
-		for _, client := range channel.Clients {
+		channel.mu.RLock()
+		members := channel.GetMembers()
+		channel.mu.RUnlock()
+		for _, member := range members {
+			client := member.Client
 			if client.nick != from.nick {
 				if err := client.Send(formattedMsg); err != nil {
 					log.Printf("ERROR: Failed to send channel message to %s: %v", client.nick, err)
@@ -686,7 +691,9 @@ func (s *Server) broadcastToChannel(channelName string, message string) error {
 	defer channel.mu.RUnlock()
 
 	var firstErr error
-	for _, client := range channel.Clients {
+	members := channel.GetMembers()
+	for _, member := range members {
+		client := member.Client
 		if err := client.Send(message); err != nil {
 			if firstErr == nil {
 				firstErr = fmt.Errorf("failed to broadcast to %s: %w", client.String(), err)
@@ -737,7 +744,7 @@ func (s *Server) removeClient(client *Client) {
 		if ch, exists := s.channels[channelName]; exists {
 			ch.RemoveClient(client.nick)
 			// If channel is empty, remove it
-			if len(ch.GetClients()) == 0 {
+			if ch.IsEmpty() {
 				delete(s.channels, channelName)
 			}
 		}
