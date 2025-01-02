@@ -54,7 +54,7 @@ func TestMessageSendingViaWeb(t *testing.T) {
 	ws.ircServer.mu.Lock()
 	ws.ircServer.channels["#test"] = &Channel{
 		Name:    "#test",
-		Clients: make(map[string]*Client),
+		Members: make(map[string]*ChannelMember),
 	}
 	ws.ircServer.mu.Unlock()
 
