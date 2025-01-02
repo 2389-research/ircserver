@@ -624,37 +624,33 @@ func (s *Server) handleWho(client *Client, args string) {
 }
 
 func (s *Server) deliverMessage(from *Client, target, msgType, message string) {
-	// Track message in web interface if available
+	formattedMsg := fmt.Sprintf(":%s %s %s :%s", from, msgType, target, message)
+
 	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	// Track message in web interface if available
 	if s.webServer != nil {
 		s.webServer.AddMessage(from.String(), target, msgType, message)
 	}
 
-	formattedMsg := fmt.Sprintf(":%s %s %s :%s", from, msgType, target, message)
-
 	if strings.HasPrefix(target, "#") {
-		s.mu.RLock()
 		if _, exists := s.channels[target]; exists {
-			s.mu.RUnlock() 
 			if err := s.broadcastToChannel(target, formattedMsg); err != nil {
 				log.Printf("ERROR: Failed to broadcast channel message: %v", err)
 			}
 		} else {
-			s.mu.RUnlock()
 			if err := from.Send(fmt.Sprintf(":server 403 %s %s :No such channel", from.nick, target)); err != nil {
 				log.Printf("ERROR: Failed to send no such channel error: %v", err)
 			}
 		}
 	} else {
-		s.mu.RLock()
 		if to, exists := s.clients[target]; exists {
-			s.mu.RUnlock()
 			if err := to.Send(formattedMsg); err != nil {
 				log.Printf("ERROR: Failed to deliver message to %s: %v", target, err)
 				return
 			}
 		} else {
-			s.mu.RUnlock()
 			if err := from.Send(fmt.Sprintf(":server 401 %s %s :No such nick/channel", from.nick, target)); err != nil {
 				log.Printf("ERROR: Failed to send no such nick error: %v", err)
 			}
