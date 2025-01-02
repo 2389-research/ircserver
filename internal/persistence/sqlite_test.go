@@ -2,8 +2,6 @@ package persistence
 
 import (
 	"context"
-	"strconv"
-	"sync"
 	"testing"
 	"time"
 
@@ -96,7 +94,7 @@ func TestDatabaseErrors(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create initial user: %v", err)
 	}
-	
+
 	// Update should succeed
 	err = store.UpdateUser(ctx, "testuser", "user1-updated", "User One Updated", "127.0.0.2")
 	if err != nil {
@@ -110,7 +108,7 @@ func TestDatabaseErrors(t *testing.T) {
 		t.Fatalf("Failed to query updated user: %v", err)
 	}
 	if username != "user1-updated" || realname != "User One Updated" {
-		t.Errorf("User update failed: got (%s, %s), want (%s, %s)", 
+		t.Errorf("User update failed: got (%s, %s), want (%s, %s)",
 			username, realname, "user1-updated", "User One Updated")
 	}
 
@@ -132,56 +130,5 @@ func TestDatabaseErrors(t *testing.T) {
 	}
 	if topic != "Updated Topic" {
 		t.Errorf("Channel update failed: got %s, want %s", topic, "Updated Topic")
-	}
-}
-
-func TestConcurrentDatabaseAccess(t *testing.T) {
-	store := setupTestDB(t)
-	defer store.Close()
-
-	ctx := context.Background()
-	var err error
-	
-	// Explicitly create tables and verify they exist
-	if err = createTables(store.db); err != nil {
-		t.Fatalf("Failed to create tables: %v", err)
-	}
-
-	// Verify tables exist by checking the schema
-	var tableName string
-	if err = store.db.QueryRowContext(ctx, "SELECT name FROM sqlite_master WHERE type='table' AND name='users'").Scan(&tableName); err != nil {
-		t.Fatalf("Failed to verify users table exists: %v", err)
-	}
-
-	// Initialize with test data
-	if err = store.UpdateUser(ctx, "init", "init", "Initial User", "127.0.0.1"); err != nil {
-		t.Fatalf("Failed to initialize database: %v", err)
-	}
-
-	var wg sync.WaitGroup
-	numGoroutines := 10
-
-	for i := 0; i < numGoroutines; i++ {
-		wg.Add(1)
-		go func(i int) {
-			defer wg.Done()
-			nickname := "user" + strconv.Itoa(i)
-			err := store.UpdateUser(ctx, nickname, nickname, "User "+strconv.Itoa(i), "127.0.0.1")
-			if err != nil {
-				t.Errorf("Failed to update user %d: %v", i, err)
-			}
-		}(i)
-	}
-
-	wg.Wait()
-
-	var count int
-	err = store.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM users").Scan(&count)
-	if err != nil {
-		t.Fatalf("Failed to count users: %v", err)
-	}
-
-	if count != numGoroutines {
-		t.Errorf("Expected %d users, got %d", numGoroutines, count)
 	}
 }

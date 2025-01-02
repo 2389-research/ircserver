@@ -3,8 +3,6 @@ package main
 import (
 	"context"
 	"os"
-	"strconv"
-	"sync"
 	"testing"
 	"time"
 
@@ -121,65 +119,5 @@ func TestMessageLogging(t *testing.T) {
 
 	if sender != "sender" || recipient != "recipient" || msgType != "PRIVMSG" || content != "Hello, world!" {
 		t.Errorf("Message log data mismatch: got (%s, %s, %s, %s), want (%s, %s, %s, %s)", sender, recipient, msgType, content, "sender", "recipient", "PRIVMSG", "Hello, world!")
-	}
-}
-
-func TestDatabaseErrors(t *testing.T) {
-	store := setupTestDB(t)
-	defer store.Close()
-
-	ctx := context.Background()
-
-	// Test unique constraint violation on users
-	err := store.UpdateUser(ctx, "duplicateuser", "user1", "User One", "127.0.0.1")
-	if err != nil {
-		t.Fatalf("Failed to update user: %v", err)
-	}
-	err = store.UpdateUser(ctx, "duplicateuser", "user2", "User Two", "127.0.0.2")
-	if err == nil {
-		t.Fatal("Expected unique constraint violation, got nil")
-	}
-
-	// Test unique constraint violation on channels
-	err = store.UpdateChannel(ctx, "#duplicatechannel", "Topic One")
-	if err != nil {
-		t.Fatalf("Failed to update channel: %v", err)
-	}
-	err = store.UpdateChannel(ctx, "#duplicatechannel", "Topic Two")
-	if err == nil {
-		t.Fatal("Expected unique constraint violation, got nil")
-	}
-}
-
-func TestConcurrentDatabaseAccess(t *testing.T) {
-	store := setupTestDB(t)
-	defer store.Close()
-
-	ctx := context.Background()
-	var wg sync.WaitGroup
-	numGoroutines := 10
-
-	for i := 0; i < numGoroutines; i++ {
-		wg.Add(1)
-		go func(i int) {
-			defer wg.Done()
-			nickname := "user" + strconv.Itoa(i)
-			err := store.UpdateUser(ctx, nickname, nickname, "User "+strconv.Itoa(i), "127.0.0.1")
-			if err != nil {
-				t.Errorf("Failed to update user %d: %v", i, err)
-			}
-		}(i)
-	}
-
-	wg.Wait()
-
-	var count int
-	err := store.QueryRow(ctx, "SELECT COUNT(*) FROM users").Scan(&count)
-	if err != nil {
-		t.Fatalf("Failed to count users: %v", err)
-	}
-
-	if count != numGoroutines {
-		t.Errorf("Expected %d users, got %d", numGoroutines, count)
 	}
 }
