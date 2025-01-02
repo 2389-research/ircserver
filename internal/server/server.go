@@ -350,7 +350,9 @@ func (s *Server) handleJoin(client *Client, args string) {
 
 func (s *Server) handlePart(client *Client, args string) {
 	if args == "" {
-		client.Send(":server 461 PART :Not enough parameters")
+		if err := client.Send(":server 461 PART :Not enough parameters"); err != nil {
+			log.Printf("ERROR: Failed to send parameters error: %v", err)
+		}
 		return
 	}
 
@@ -380,7 +382,9 @@ func (s *Server) handlePart(client *Client, args string) {
 func (s *Server) handlePrivMsg(client *Client, args string) {
 	parts := strings.SplitN(args, " ", 2)
 	if len(parts) < 2 {
-		client.Send(":server 461 PRIVMSG :Not enough parameters")
+		if err := client.Send(":server 461 PRIVMSG :Not enough parameters"); err != nil {
+			log.Printf("ERROR: Failed to send parameters error: %v", err)
+		}
 		return
 	}
 
@@ -407,13 +411,17 @@ func (s *Server) handleNotice(client *Client, args string) {
 }
 
 func (s *Server) handlePing(client *Client, args string) {
-	client.Send(fmt.Sprintf("PONG :%s", args))
+	if err := client.Send(fmt.Sprintf("PONG :%s", args)); err != nil {
+		log.Printf("ERROR: Failed to send PONG response: %v", err)
+	}
 }
 
 func (s *Server) handleTopic(client *Client, args string) {
 	parts := strings.SplitN(args, " ", 2)
 	if len(parts) < 1 {
-		client.Send(":server 461 TOPIC :Not enough parameters")
+		if err := client.Send(":server 461 TOPIC :Not enough parameters"); err != nil {
+			log.Printf("ERROR: Failed to send parameters error: %v", err)
+		}
 		return
 	}
 
@@ -423,7 +431,9 @@ func (s *Server) handleTopic(client *Client, args string) {
 	s.mu.RUnlock()
 
 	if !exists {
-		client.Send(fmt.Sprintf(":server 403 %s %s :No such channel", client.nick, channelName))
+		if err := client.Send(fmt.Sprintf(":server 403 %s %s :No such channel", client.nick, channelName)); err != nil {
+			log.Printf("ERROR: Failed to send no such channel error: %v", err)
+		}
 		return
 	}
 
@@ -431,9 +441,13 @@ func (s *Server) handleTopic(client *Client, args string) {
 	if len(parts) == 1 {
 		topic := channel.GetTopic()
 		if topic == "" {
-			client.Send(fmt.Sprintf(":server 331 %s %s :No topic is set", client.nick, channelName))
+			if err := client.Send(fmt.Sprintf(":server 331 %s %s :No topic is set", client.nick, channelName)); err != nil {
+				log.Printf("ERROR: Failed to send no topic message: %v", err)
+			}
 		} else {
-			client.Send(fmt.Sprintf(":server 332 %s %s :%s", client.nick, channelName, topic))
+			if err := client.Send(fmt.Sprintf(":server 332 %s %s :%s", client.nick, channelName, topic)); err != nil {
+				log.Printf("ERROR: Failed to send topic message: %v", err) 
+			}
 		}
 		return
 	}
@@ -455,7 +469,9 @@ func (s *Server) handleTopic(client *Client, args string) {
 func (s *Server) handleWho(client *Client, args string) {
 	target := strings.TrimSpace(args)
 	if target == "" {
-		client.Send(":server 461 WHO :Not enough parameters")
+		if err := client.Send(":server 461 WHO :Not enough parameters"); err != nil {
+			log.Printf("ERROR: Failed to send parameters error: %v", err)
+		}
 		return
 	}
 
@@ -466,24 +482,30 @@ func (s *Server) handleWho(client *Client, args string) {
 		// WHO for channel
 		channel, exists := s.channels[target]
 		if !exists {
-			client.Send(fmt.Sprintf(":server 403 %s %s :No such channel", client.nick, target))
+			if err := client.Send(fmt.Sprintf(":server 403 %s %s :No such channel", client.nick, target)); err != nil {
+				log.Printf("ERROR: Failed to send no channel error: %v", err)
+			}
 			return
 		}
 
 		for _, member := range channel.GetClients() {
 			// <channel> <username> <host> <server> <nick> <H|G>[*][@|+] :<hopcount> <real name>
-			client.Send(fmt.Sprintf(":server 352 %s %s %s %s server %s H :0 %s",
+			if err := client.Send(fmt.Sprintf(":server 352 %s %s %s %s server %s H :0 %s",
 				client.nick, target, member.username,
 				member.conn.RemoteAddr().String(),
-				member.nick, member.realname))
+				member.nick, member.realname)); err != nil {
+				log.Printf("ERROR: Failed to send WHO response: %v", err)
+			}
 		}
 	} else {
 		// WHO for user
 		if targetClient, exists := s.clients[target]; exists {
-			client.Send(fmt.Sprintf(":server 352 %s * %s %s server %s H :0 %s",
+			if err := client.Send(fmt.Sprintf(":server 352 %s * %s %s server %s H :0 %s",
 				client.nick, targetClient.username,
 				targetClient.conn.RemoteAddr().String(),
-				targetClient.nick, targetClient.realname))
+				targetClient.nick, targetClient.realname)); err != nil {
+				log.Printf("ERROR: Failed to send WHO response: %v", err) 
+			}
 		}
 	}
 
