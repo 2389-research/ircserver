@@ -32,6 +32,28 @@ type Channel struct {
 	password string                   // Optional channel password
 }
 
+// channelSnapshot represents an immutable copy of channel state
+type channelSnapshot struct {
+	members map[string]*ChannelMember
+	topic   string
+}
+
+// snapshot creates a copy of relevant channel state under read lock
+func (ch *Channel) snapshot() channelSnapshot {
+	ch.mu.RLock()
+	defer ch.mu.RUnlock()
+	
+	members := make(map[string]*ChannelMember, len(ch.Members))
+	for k, v := range ch.Members {
+		members[k] = v
+	}
+	
+	return channelSnapshot{
+		members: members,
+		topic:   ch.Topic,
+	}
+}
+
 // NewChannel creates a new IRC channel.
 func NewChannel(name string) *Channel {
 	ch := &Channel{

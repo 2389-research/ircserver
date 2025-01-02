@@ -16,15 +16,42 @@ import (
 type Server struct {
 	host      string
 	port      string
-	clients   map[string]*Client
-	channels  map[string]*Channel
+	clients   map[string]*Client      // Protected by mu
+	channels  map[string]*Channel     // Protected by mu
 	store     persistence.Store
 	logger    *Logger
 	webServer *WebServer
 	config    *config.Config
 	listener  net.Listener
 	shutdown  chan struct{}
-	mu        sync.RWMutex
+	mu        sync.RWMutex           // Protects clients and channels maps
+}
+
+// serverSnapshot contains copied server state
+type serverSnapshot struct {
+	channels map[string]*Channel
+	clients  map[string]*Client
+}
+
+// snapshot creates a copy of server state under read lock
+func (s *Server) snapshot() serverSnapshot {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	channels := make(map[string]*Channel, len(s.channels))
+	for k, v := range s.channels {
+		channels[k] = v
+	}
+	
+	clients := make(map[string]*Client, len(s.clients))
+	for k, v := range s.clients {
+		clients[k] = v
+	}
+
+	return serverSnapshot{
+		channels: channels,
+		clients:  clients,
+	}
 }
 
 // New creates a new IRC server instance.
@@ -627,9 +654,7 @@ func (s *Server) handleWho(client *Client, args string) {
 func (s *Server) deliverMessage(from *Client, target, msgType, message string) {
 	formattedMsg := fmt.Sprintf(":%s %s %s :%s", from, msgType, target, message)
 
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
+	// Log message before acquiring any locks
 	s.logger.LogMessage(from, target, msgType, message)
 
 	// Track message in web interface if available
@@ -638,7 +663,11 @@ func (s *Server) deliverMessage(from *Client, target, msgType, message string) {
 	}
 
 	if strings.HasPrefix(target, "#") {
+		// Get channel under read lock
+		s.mu.RLock()
 		channel, exists := s.channels[target]
+		s.mu.RUnlock()
+
 		if !exists {
 			err := from.Send(fmt.Sprintf(":server 403 %s %s :No such channel", from.nick, target))
 			if err != nil {
@@ -647,11 +676,11 @@ func (s *Server) deliverMessage(from *Client, target, msgType, message string) {
 			return
 		}
 		
+		// Take snapshot of channel members
+		snapshot := channel.snapshot()
+		
 		// Send to all clients in channel except sender
-		channel.mu.RLock()
-		members := channel.GetMembers()
-		channel.mu.RUnlock()
-		for _, member := range members {
+		for _, member := range snapshot.members {
 			client := member.Client
 			if client.nick != from.nick {
 				if err := client.Send(formattedMsg); err != nil {
