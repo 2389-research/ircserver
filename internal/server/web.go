@@ -140,8 +140,10 @@ func (ws *WebServer) Shutdown() error {
 }
 
 func (ws *WebServer) collectDashboardData() DashboardData {
+	// Collect messages with minimal lock time
 	ws.mu.RLock()
-	messages := ws.messages
+	messages := make([]MessageInfo, len(ws.messages))
+	copy(messages, ws.messages)
 	ws.mu.RUnlock()
 
 	data := DashboardData{
@@ -150,11 +152,23 @@ func (ws *WebServer) collectDashboardData() DashboardData {
 		Messages: messages,
 	}
 
-	// Safely collect users
+	// Collect snapshot of server state
 	ws.ircServer.mu.RLock()
-	for _, client := range ws.ircServer.clients {
+	clientsCopy := make(map[string]*Client, len(ws.ircServer.clients))
+	channelsCopy := make(map[string]*Channel, len(ws.ircServer.channels))
+	
+	for nick, client := range ws.ircServer.clients {
+		clientsCopy[nick] = client
+	}
+	for name, channel := range ws.ircServer.channels {
+		channelsCopy[name] = channel
+	}
+	ws.ircServer.mu.RUnlock()
+
+	// Process clients without holding server lock
+	for _, client := range clientsCopy {
 		client.mu.Lock()
-		channels := make([]string, 0)
+		channels := make([]string, 0, len(client.channels))
 		for ch := range client.channels {
 			channels = append(channels, ch)
 		}
@@ -168,10 +182,10 @@ func (ws *WebServer) collectDashboardData() DashboardData {
 		client.mu.Unlock()
 	}
 
-	// Safely collect channels
-	for name, channel := range ws.ircServer.channels {
+	// Process channels without holding server lock
+	for name, channel := range channelsCopy {
 		channel.mu.RLock()
-		users := make([]string, 0)
+		users := make([]string, 0, len(channel.Clients))
 		for _, client := range channel.Clients {
 			users = append(users, client.nick)
 		}
@@ -184,7 +198,6 @@ func (ws *WebServer) collectDashboardData() DashboardData {
 		})
 		channel.mu.RUnlock()
 	}
-	ws.ircServer.mu.RUnlock()
 
 	return data
 }

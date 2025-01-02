@@ -59,9 +59,16 @@ func (ch *Channel) GetTopic() string {
 // GetClients returns a list of all clients in the channel
 func (ch *Channel) GetClients() []*Client {
 	ch.mu.RLock()
-	defer ch.mu.RUnlock()
-	clients := make([]*Client, 0, len(ch.Clients))
-	for _, client := range ch.Clients {
+	// Create fixed-size slice upfront
+	clientMap := make(map[string]*Client, len(ch.Clients))
+	for nick, client := range ch.Clients {
+		clientMap[nick] = client
+	}
+	ch.mu.RUnlock()
+
+	// Convert map to slice outside the lock
+	clients := make([]*Client, 0, len(clientMap))
+	for _, client := range clientMap {
 		clients = append(clients, client)
 	}
 	return clients

@@ -475,11 +475,25 @@ func (s *Server) SetConfig(cfg *config.Config) {
 }
 
 func (s *Server) removeClient(client *Client) {
+	// First collect all channels the client is in
+	s.mu.RLock()
+	channels := make([]string, 0, len(client.channels))
+	for channelName := range client.channels {
+		channels = append(channels, channelName)
+	}
+	s.mu.RUnlock()
+
+	// Broadcast departure to each channel
+	for _, channelName := range channels {
+		s.broadcastToChannel(channelName, fmt.Sprintf(":%s QUIT :Client exiting", client))
+	}
+
+	// Now remove the client with write lock
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	// Remove from channels
-	for channelName := range client.channels {
+	for _, channelName := range channels {
 		if channel := s.channels[channelName]; channel != nil {
 			channel.RemoveClient(client.nick)
 			// If channel is empty, remove it
