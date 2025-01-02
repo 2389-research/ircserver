@@ -274,7 +274,9 @@ func (s *Server) handleUser(client *Client, args string) {
 		client.nick, client.nick, client.username, client.conn.RemoteAddr().String())
 	log.Printf("INFO: New client registered - Nick: %s, Username: %s, Address: %s",
 		client.nick, client.username, client.conn.RemoteAddr().String())
-	client.Send(welcomeMsg)
+	if err := client.Send(welcomeMsg); err != nil {
+		log.Printf("ERROR: Failed to send welcome message: %v", err)
+	}
 }
 
 func (s *Server) handleQuit(client *Client, args string) {
@@ -284,7 +286,9 @@ func (s *Server) handleQuit(client *Client, args string) {
 	}
 
 	s.removeClient(client)
-	client.Send(fmt.Sprintf("ERROR :Closing Link: %s (%s)", client, quitMsg))
+	if err := client.Send(fmt.Sprintf("ERROR :Closing Link: %s (%s)", client, quitMsg)); err != nil {
+		log.Printf("ERROR: Failed to send quit message: %v", err)
+	}
 	client.conn.Close()
 }
 
@@ -294,7 +298,9 @@ func (s *Server) handleJoin(client *Client, args string) {
 		channelName = strings.TrimSpace(channelName)
 		// Validate channel name
 		if !isValidChannelName(channelName) {
-			client.Send(fmt.Sprintf(":server 403 %s %s :Invalid channel name", client.nick, channelName))
+			if err := client.Send(fmt.Sprintf(":server 403 %s %s :Invalid channel name", client.nick, channelName)); err != nil {
+				log.Printf("ERROR: Failed to send invalid channel name error: %v", err)
+			}
 			continue
 		}
 
