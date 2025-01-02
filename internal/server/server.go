@@ -18,6 +18,7 @@ type Server struct {
 	clients  map[string]*Client
 	channels map[string]*Channel
 	store    persistence.Store
+	logger   *Logger
 	mu       sync.RWMutex
 }
 
@@ -29,6 +30,7 @@ func New(host, port string, store persistence.Store) *Server {
 		clients:  make(map[string]*Client),
 		channels: make(map[string]*Channel),
 		store:    store,
+		logger:   NewLogger(store),
 	}
 }
 
@@ -60,6 +62,8 @@ func (s *Server) handleConnection(conn net.Conn) {
 
 	client := NewClient(conn)
 	reader := bufio.NewReader(conn)
+	s.logger.LogEvent(EventConnect, client, "SERVER", 
+		fmt.Sprintf("from %s", conn.RemoteAddr()))
 
 	for {
 		message, err := reader.ReadString('\n')
@@ -188,9 +192,10 @@ func (s *Server) handleJoin(client *Client, args string) {
 		channel.AddClient(client)
 		client.channels[channelName] = true
 		
-		// Store channel info in database
+		s.logger.LogEvent(EventJoin, client, channelName, "")
+		
 		if err := s.store.UpdateChannel(channelName, channel.GetTopic()); err != nil {
-			log.Printf("ERROR: Failed to store channel info: %v", err)
+			s.logger.LogError("Failed to store channel info", err)
 		}
 		
 		s.mu.Unlock()
@@ -252,10 +257,7 @@ func (s *Server) handlePrivMsg(client *Client, args string) {
 	target := parts[0]
 	message := strings.TrimPrefix(parts[1], ":")
 	
-	// Log the message
-	if err := s.store.LogMessage(client.nick, target, "PRIVMSG", message); err != nil {
-		log.Printf("ERROR: Failed to log message: %v", err)
-	}
+	s.logger.LogMessage(client, target, "PRIVMSG", message)
 	
 	s.deliverMessage(client, target, "PRIVMSG", message)
 }
@@ -269,10 +271,7 @@ func (s *Server) handleNotice(client *Client, args string) {
 	target := parts[0]
 	message := strings.TrimPrefix(parts[1], ":")
 	
-	// Log the notice
-	if err := s.store.LogMessage(client.nick, target, "NOTICE", message); err != nil {
-		log.Printf("ERROR: Failed to log notice: %v", err)
-	}
+	s.logger.LogMessage(client, target, "NOTICE", message)
 	
 	s.deliverMessage(client, target, "NOTICE", message)
 }
