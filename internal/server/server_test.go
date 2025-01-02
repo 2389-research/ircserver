@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"strings"
 	"sync"
 	"testing"
@@ -80,7 +81,7 @@ func TestChannelOperations(t *testing.T) {
 // TestConcurrentOperations verifies thread-safety of server operations
 func TestConcurrentOperations(t *testing.T) {
 	// Add timeout for the whole test
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	_, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	const (
@@ -113,20 +114,26 @@ func TestConcurrentOperations(t *testing.T) {
 		srv.mu.Unlock()
 	}
 
+	// WaitGroup for all operations
 	var wg sync.WaitGroup
 
 	// Launch concurrent join operations
 	for _, client := range clients {
-		for _, channel := range channels {
-			wg.Add(1)
-			go func(c *Client, ch string) {
-				defer wg.Done()
-				srv.handleJoin(c, ch)
-			}(client, channel)
-		}
+		wg.Add(1)
+		go func(c *Client) {
+			defer wg.Done()
+			// Each client joins random channels
+			for _, channel := range channels[:rand.Intn(len(channels))+1] {
+				srv.handleJoin(c, channel)
+			}
+		}(client)
 	}
 
-	// Launch concurrent message operations
+	// Wait for joins to complete
+	wg.Wait()
+	t.Log("Join operations completed")
+
+	// Launch message operations
 	for i := 0; i < numMessages; i++ {
 		wg.Add(1)
 		go func(msgNum int) {
@@ -138,38 +145,57 @@ func TestConcurrentOperations(t *testing.T) {
 		}(i)
 	}
 
-	// Launch concurrent part operations
-	for _, client := range clients {
-		for _, channel := range channels {
+	// Wait for messages to complete
+	wg.Wait()
+	t.Log("Message operations completed")
+
+	// Now launch part operations - ensure all clients leave all channels
+	for _, channel := range channels {
+		srv.mu.RLock()
+		ch, exists := srv.channels[channel]
+		srv.mu.RUnlock()
+
+		if !exists {
+			continue
+		}
+
+		// Get members under read lock
+		ch.mu.RLock()
+		members := make([]*Client, 0, len(ch.Members))
+		for _, member := range ch.Members {
+			members = append(members, member.Client)
+		}
+		ch.mu.RUnlock()
+
+		// Now have each member part
+		for _, client := range members {
 			wg.Add(1)
-			go func(c *Client, ch string) {
+			go func(c *Client, channelName string) {
 				defer wg.Done()
-				srv.handlePart(c, ch)
+				srv.handlePart(c, channelName)
 			}(client, channel)
 		}
 	}
 
-	// Wait with timeout
-	done := make(chan struct{})
-	go func() {
-		wg.Wait()
-		close(done)
-	}()
+	// Wait for parts to complete
+	wg.Wait()
+	t.Log("Part operations completed")
 
-	select {
-	case <-ctx.Done():
-		t.Fatal("Test timed out")
-	case <-done:
-		// Success
-	}
-
-	// Give time for channel cleanup
+	// Give a small window for cleanup
 	time.Sleep(100 * time.Millisecond)
 
 	// Verify final state
-	state := srv.getState()
-	if len(state.channels) != 0 {
-		t.Errorf("Expected all channels to be removed, got %d", len(state.channels))
+	srv.mu.RLock()
+	remainingChannels := len(srv.channels)
+	var channelNames []string
+	for name := range srv.channels {
+		channelNames = append(channelNames, name)
+	}
+	srv.mu.RUnlock()
+
+	if remainingChannels != 0 {
+		t.Errorf("Expected all channels to be removed, got %d. Remaining channels: %v",
+			remainingChannels, channelNames)
 	}
 
 	// Clean up

@@ -372,31 +372,47 @@ func (s *Server) handleQuit(client *Client, args string) {
 	client.conn.Close()
 }
 
+// getOrCreateChannel safely gets or creates a channel without holding the server lock during channel operations
+func (s *Server) getOrCreateChannel(name string) *Channel {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	channel, exists := s.channels[name]
+	if !exists {
+		channel = NewChannel(name)
+		s.channels[name] = channel
+	}
+	return channel
+}
+
+// handleJoin with improved concurrency
 func (s *Server) handleJoin(client *Client, args string) {
 	// First validate all channel names
 	channelNames := strings.Split(args, ",")
 	for _, name := range channelNames {
 		name = strings.TrimSpace(name)
 		if !isValidChannelName(name) || strings.Contains(name, ",") {
-			if err := client.Send(fmt.Sprintf(":server 403 %s %s :Invalid channel name", client.nick, name)); err != nil {
-				log.Printf("ERROR: Failed to send invalid channel name error: %v", err)
-			}
-			return // Exit early if any channel name is invalid
+			client.Send(fmt.Sprintf(":server 403 %s %s :Invalid channel name", client.nick, name))
+			return
 		}
 	}
 
 	// Now process each valid channel
 	for _, channelName := range channelNames {
 		channelName = strings.TrimSpace(channelName)
-		s.mu.Lock()
-		channel, exists := s.channels[channelName]
-		if !exists {
-			channel = NewChannel(channelName)
-			s.channels[channelName] = channel
-		}
-		channel.AddClient(client, UserModeNormal)
-		client.channels[channelName] = true
 
+		// Get or create channel without extended lock holding
+		channel := s.getOrCreateChannel(channelName)
+
+		// Add client to channel
+		channel.AddClient(client, UserModeNormal)
+
+		// Update client's channel list
+		client.mu.Lock()
+		client.channels[channelName] = true
+		client.mu.Unlock()
+
+		// Log events and update storage
 		ctx := context.Background()
 		if err := s.logger.LogEvent(ctx, EventJoin, client, channelName, ""); err != nil {
 			log.Printf("ERROR: Failed to log join event: %v", err)
@@ -406,88 +422,80 @@ func (s *Server) handleJoin(client *Client, args string) {
 			s.logger.LogError("Failed to store channel info", err)
 		}
 
-		s.mu.Unlock()
-
 		// Send JOIN message to all clients in the channel
 		joinMsg := fmt.Sprintf(":%s JOIN %s", client, channelName)
-		if err := s.broadcastToChannel(channelName, joinMsg); err != nil {
-			log.Printf("ERROR: Failed to broadcast join message: %v", err)
-		}
+		s.broadcastToChannel(channelName, joinMsg)
 
-		// Always send topic reply - either the topic or no topic message
+		// Send topic if it exists
 		topic := channel.GetTopic()
 		if topic != "" {
-			if err := client.Send(fmt.Sprintf(":server 332 %s %s :%s", client.nick, channelName, topic)); err != nil {
-				log.Printf("ERROR: Failed to send channel topic: %v", err)
-			}
+			client.Send(fmt.Sprintf(":server 332 %s %s :%s", client.nick, channelName, topic))
 		} else {
-			if err := client.Send(fmt.Sprintf(":server 331 %s %s :No topic is set", client.nick, channelName)); err != nil {
-				log.Printf("ERROR: Failed to send no topic message: %v", err)
-			}
+			client.Send(fmt.Sprintf(":server 331 %s %s :No topic is set", client.nick, channelName))
 		}
 
 		// Send list of users in channel
-		names := []string{}
-		for _, member := range channel.GetMembers() {
-			c := member.Client
-			names = append(names, c.nick)
+		members := channel.GetMembers()
+		names := make([]string, 0, len(members))
+		for _, member := range members {
+			names = append(names, member.Client.nick)
 		}
-		if err := client.Send(fmt.Sprintf(":server 353 %s = %s :%s", client.nick, channelName, strings.Join(names, " "))); err != nil {
-			log.Printf("ERROR: Failed to send channel names list: %v", err)
-		}
-		if err := client.Send(fmt.Sprintf(":server 366 %s %s :End of /NAMES list", client.nick, channelName)); err != nil {
-			log.Printf("ERROR: Failed to send end of names list: %v", err)
-		}
+		client.Send(fmt.Sprintf(":server 353 %s = %s :%s", client.nick, channelName, strings.Join(names, " ")))
+		client.Send(fmt.Sprintf(":server 366 %s %s :End of /NAMES list", client.nick, channelName))
 	}
 }
 
 func (s *Server) handlePart(client *Client, args string) {
 	if args == "" {
-		if err := client.Send(":server 461 PART :Not enough parameters"); err != nil {
-			log.Printf("ERROR: Failed to send parameters error: %v", err)
-		}
+		client.Send(":server 461 PART :Not enough parameters")
 		return
 	}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	
 	channels := strings.Split(args, ",")
 	for _, channelName := range channels {
 		channelName = strings.TrimSpace(channelName)
 
+		// First check if channel exists
+		s.mu.RLock()
 		channel, exists := s.channels[channelName]
+		s.mu.RUnlock()
+
 		if !exists {
-			if err := client.Send(fmt.Sprintf(":server 403 %s %s :No such channel", client.nick, channelName)); err != nil {
-				log.Printf("ERROR: Failed to send no such channel error: %v", err)
-			}
+			client.Send(fmt.Sprintf(":server 403 %s %s :No such channel", client.nick, channelName))
 			continue
 		}
 
-		// Check if client is in channel
+		// Check membership and send error if not in channel
 		if !channel.HasMember(client.nick) {
-			if err := client.Send(fmt.Sprintf(":server 442 %s %s :You're not on that channel", client.nick, channelName)); err != nil {
-				log.Printf("ERROR: Failed to send not on channel error: %v", err)
-			}
+			client.Send(fmt.Sprintf(":server 442 %s %s :You're not on that channel", client.nick, channelName))
 			continue
 		}
 
-		// Send PART message before removing from channel
+		// Send PART message before removing
 		partMsg := fmt.Sprintf(":%s PART %s", client, channelName)
-		if err := s.broadcastToChannel(channelName, partMsg); err != nil {
-			log.Printf("ERROR: Failed to broadcast PART message: %v", err)
-		}
+		s.broadcastToChannel(channelName, partMsg)
 
+		// Remove client from channel
 		channel.RemoveClient(client.nick)
-		delete(client.channels, channelName)
 
-		// Check if channel is empty and remove it if so
-		if len(channel.Members) == 0 {
-			delete(s.channels, channelName)
-			ctx := context.Background()
-			if err := s.logger.LogEvent(ctx, EventChannelDelete, client, channelName, "Channel removed - last user left"); err != nil {
-				log.Printf("ERROR: Failed to log channel deletion: %v", err)
+		// Update client's channel list
+		client.mu.Lock()
+		delete(client.channels, channelName)
+		client.mu.Unlock()
+
+		// If channel is empty after removal, remove it from server
+		if channel.IsEmpty() {
+			s.mu.Lock()
+			// Check again if empty under write lock
+			if channel.IsEmpty() {
+				delete(s.channels, channelName)
+				// Log channel deletion
+				ctx := context.Background()
+				if err := s.logger.LogEvent(ctx, EventChannelDelete, client, channelName, "Channel removed - last user left"); err != nil {
+					log.Printf("ERROR: Failed to log channel deletion: %v", err)
+				}
 			}
+			s.mu.Unlock()
 		}
 
 		// Log the PART event
