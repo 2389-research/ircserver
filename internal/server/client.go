@@ -95,6 +95,51 @@ func (c *Client) Close() {
 	c.conn.Close()
 }
 
+// handleConnection processes the client connection
+func (c *Client) handleConnection() error {
+	reader := bufio.NewReader(c.conn)
+	
+	for {
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			return err
+		}
+		
+		c.UpdateActivity()
+		line = strings.TrimSpace(line)
+		
+		if strings.HasPrefix(line, "NICK ") {
+			nick := strings.TrimPrefix(line, "NICK ")
+			if nick == "" {
+				return &IRCError{Code: "431", Message: "No nickname given"}
+			}
+			if !isValidNick(nick) {
+				return &IRCError{Code: "432", Message: "Erroneous nickname"}
+			}
+			c.nick = nick
+		}
+		
+		if strings.HasPrefix(line, "USER ") {
+			parts := strings.Split(line, " ")
+			if len(parts) < 5 {
+				return &IRCError{Code: "461", Message: "Not enough parameters"}
+			}
+			c.username = parts[1]
+			c.realname = strings.TrimPrefix(strings.Join(parts[4:], " "), ":")
+			return nil
+		}
+	}
+}
+
+func isValidNick(nick string) bool {
+	for _, r := range nick {
+		if !unicode.IsLetter(r) && !unicode.IsNumber(r) && r != '-' && r != '_' {
+			return false
+		}
+	}
+	return true
+}
+
 // String returns a string representation of the client
 func (c *Client) String() string {
 	if c.nick == "" {
