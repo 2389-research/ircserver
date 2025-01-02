@@ -6,6 +6,13 @@ import (
 	"time"
 )
 
+func init() {
+	// Ensure testdata directory exists
+	if err := os.MkdirAll("testdata", 0755); err != nil {
+		panic(fmt.Sprintf("Failed to create testdata directory: %v", err))
+	}
+}
+
 func TestValidConfigLoading(t *testing.T) {
 	cfg, err := Load("testdata/valid_config.yaml")
 	if err != nil {

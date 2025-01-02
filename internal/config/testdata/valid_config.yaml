@@ -1,0 +1,11 @@
+server:
+  name: "My IRC Server"
+  host: "localhost"
+  port: "6667"
+  web_port: "8080"
+storage:
+  log_path: "irc.log"
+  sqlite_path: "irc.db"
+irc:
+  default_channel: "#general"
+  max_message_length: 512
