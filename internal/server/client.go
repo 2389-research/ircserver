@@ -157,6 +157,7 @@ func (c *Client) handleConnection() error {
 
 		switch cmd {
 		case "PONG":
+			log.Printf("DEBUG: Received PONG from client %s", c.String())
 			c.mu.Lock()
 			c.lastPong = time.Now()
 			if c.pingTimer != nil {
