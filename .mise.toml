@@ -10,6 +10,6 @@ lint = "golangci-lint run"
 lint-fix = "golangci-lint run --fix"
 lint-all = "golangci-lint run --enable-all"
 lint-all-fix = "golangci-lint run --enable-all --fix"
-run = "go run *.go"
+run = "go run ./cmd/ircserver/main.go"
 deps = "go get ./... && go mod tidy"
 all = { depends = ["lint", "test", "build"] }
