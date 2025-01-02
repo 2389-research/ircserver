@@ -419,6 +419,7 @@ func (s *Server) handleNotice(client *Client, args string) {
 }
 
 func (s *Server) handlePing(client *Client, args string) {
+	client.UpdateActivity()
 	if err := client.Send(fmt.Sprintf("PONG :%s", args)); err != nil {
 		log.Printf("ERROR: Failed to send PONG response: %v", err)
 	}

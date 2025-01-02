@@ -170,3 +170,35 @@ func TestErrorHandling(t *testing.T) {
 		panic("Simulated panic")
 	})
 }
+
+func TestKeepAlive(t *testing.T) {
+	// Setup test server and client
+	cfg := config.DefaultConfig()
+	cfg.IRC.KeepAliveInterval = 1 * time.Second
+	server := New("localhost", "6667", setupTestDB(t), cfg)
+	go server.Start()
+	defer server.Shutdown()
+
+	conn, err := net.Dial("tcp", "localhost:6667")
+	if err != nil {
+		t.Fatalf("Failed to connect to server: %v", err)
+	}
+	defer conn.Close()
+
+	client := NewClient(conn, cfg)
+	defer client.Close()
+
+	// Wait for keepalive interval and check for PING message
+	time.Sleep(2 * time.Second)
+
+	buffer := make([]byte, 512)
+	n, err := conn.Read(buffer)
+	if err != nil {
+		t.Fatalf("Failed to read from connection: %v", err)
+	}
+
+	message := string(buffer[:n])
+	if !strings.Contains(message, "PING") {
+		t.Errorf("Expected PING message, got %s", message)
+	}
+}

@@ -11,3 +11,4 @@ storage:
 irc:
   default_channel: "#general"
   max_message_length: 512
+  keepalive_interval: 60s

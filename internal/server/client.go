@@ -78,7 +78,20 @@ func (c *Client) monitorIdle() {
 				log.Printf("INFO: Client %s timed out after %v of inactivity", c.String(), idle)
 				c.conn.Close()
 				return
-			}
+				}
+			c.sendKeepAlive()
+		}
+	}
+}
+
+// sendKeepAlive sends a PING message to the server to keep the connection active.
+func (c *Client) sendKeepAlive() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if time.Since(c.lastActive) >= c.config.IRC.KeepAliveInterval {
+		if err := c.Send(fmt.Sprintf("PING :%s", c.config.Server.Name)); err != nil {
+			log.Printf("ERROR: Failed to send keepalive message: %v", err)
 		}
 	}
 }
