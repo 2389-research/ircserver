@@ -19,8 +19,12 @@ type testClient struct {
 
 func (t *testClient) Send(msg string) error {
 	t.messages = append(t.messages, msg)
+	// Don't call the underlying Client's Send
 	return nil
 }
+
+// Ensure testClient satisfies the Client interface
+var _ *Client = (*testClient)(nil)
 
 func newTestClient(nick string, cfg *config.Config) *testClient {
 	client := NewClient(&mockConn{readData: strings.NewReader("")}, cfg)
@@ -212,12 +216,13 @@ func TestPrivMsgToChannel(t *testing.T) {
 	s.clients[recipient1.nick] = recipient1.Client
 	s.clients[recipient2.nick] = recipient2.Client
 
+	// Create channel with testClient wrappers
 	s.channels[channelName] = &Channel{
-		Name:    channelName,
+		Name: channelName,
 		Clients: map[string]*Client{
-			sender.nick:     sender.Client,
-			recipient1.nick: recipient1.Client,
-			recipient2.nick: recipient2.Client,
+			sender.nick:     sender,
+			recipient1.nick: recipient1,
+			recipient2.nick: recipient2,
 		},
 		Created: time.Now(),
 	}
