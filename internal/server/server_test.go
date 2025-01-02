@@ -11,24 +11,22 @@ import (
 	"ircserver/internal/persistence"
 )
 
-// mockClient implements a test client
-type mockClient struct {
-	nick     string
+// testClient wraps Client for testing
+type testClient struct {
+	*Client
 	messages []string
 }
 
-func (m *mockClient) Send(msg string) error {
-	m.messages = append(m.messages, msg)
+func (t *testClient) Send(msg string) error {
+	t.messages = append(t.messages, msg)
 	return nil
 }
 
-func (m *mockClient) GetNick() string {
-	return m.nick
-}
-
-func newMockClient(nick string) *mockClient {
-	return &mockClient{
-		nick:     nick,
+func newTestClient(nick string, cfg *config.Config) *testClient {
+	client := NewClient(&mockConn{readData: strings.NewReader("")}, cfg)
+	client.nick = nick
+	return &testClient{
+		Client:   client,
 		messages: make([]string, 0),
 	}
 }
@@ -151,13 +149,14 @@ func setupTestServer() *Server {
 
 func TestPrivMsgToUser(t *testing.T) {
 	s := setupTestServer()
+	cfg := config.DefaultConfig()
 	
 	// Setup sender and recipient
-	sender := newMockClient("alice")
-	recipient := newMockClient("bob")
+	sender := newTestClient("alice", cfg)
+	recipient := newTestClient("bob", cfg)
 	
-	s.clients[sender.GetNick()] = sender
-	s.clients[recipient.GetNick()] = recipient
+	s.clients[sender.nick] = sender.Client
+	s.clients[recipient.nick] = recipient.Client
 	
 	tests := []struct {
 		name     string
@@ -208,16 +207,17 @@ func TestPrivMsgToChannel(t *testing.T) {
 	
 	channelName := "#test"
 	s.channels[channelName] = &Channel{
-		name:    channelName,
-		clients: map[string]Client{
-			sender.GetNick():     sender,
-			recipient1.GetNick(): recipient1,
-			recipient2.GetNick(): recipient2,
+		Name:    channelName,
+		Clients: map[string]*Client{
+			sender.nick:     sender.Client,
+			recipient1.nick: recipient1.Client,
+			recipient2.nick: recipient2.Client,
 		},
+		Created: time.Now(),
 	}
 	
 	// Test sending channel message
-	s.handleMessage(sender, "PRIVMSG #test :Hello channel!")
+	s.handleMessage(context.Background(), sender.Client, "PRIVMSG #test :Hello channel!")
 	
 	expected := ":alice PRIVMSG #test :Hello channel!"
 	
