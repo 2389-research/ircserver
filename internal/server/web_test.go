@@ -7,7 +7,6 @@ import (
 	"strings"
 	"sync"
 	"testing"
-	"time"
 )
 
 func setupTestWebServer() *WebServer {
@@ -116,11 +115,4 @@ func TestWebInterfaceAuthentication(t *testing.T) {
 
 	// Add authentication logic and test it here
 	// For example, check if a specific header or token is present
-}
-
-func TestWebsocketFunctionality(t *testing.T) {
-	ws := setupTestWebServer()
-
-	// Add websocket handling logic and test it here
-	// For example, establish a websocket connection and send/receive messages
 }
