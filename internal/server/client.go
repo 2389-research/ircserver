@@ -2,6 +2,7 @@ package server
 
 import (
 	"bufio"
+	"log"
 	"net"
 	"sync"
 )
@@ -19,11 +20,13 @@ type Client struct {
 
 // NewClient creates a new IRC client instance
 func NewClient(conn net.Conn) *Client {
-	return &Client{
+	client := &Client{
 		conn:     conn,
 		channels: make(map[string]bool),
 		writer:   bufio.NewWriter(conn),
 	}
+	log.Printf("INFO: New client connection from %s", conn.RemoteAddr().String())
+	return client
 }
 
 // Send sends a message to the client
@@ -33,8 +36,10 @@ func (c *Client) Send(message string) error {
 	
 	_, err := c.writer.WriteString(message + "\r\n")
 	if err != nil {
+		log.Printf("ERROR: Failed to send message to client %s: %v", c.String(), err)
 		return err
 	}
+	log.Printf("DEBUG: Sent to client %s: %s", c.String(), message)
 	return c.writer.Flush()
 }
 

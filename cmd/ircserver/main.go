@@ -19,8 +19,9 @@ func main() {
 	host := getEnv("IRC_HOST", "localhost")
 	port := getEnv("IRC_PORT", "6667")
 
+	log.Printf("INFO: Starting IRC server with host=%s port=%s", host, port)
 	srv := server.New(host, port)
 	if err := srv.Start(); err != nil {
-		log.Fatalf("Server error: %v", err)
+		log.Fatalf("FATAL: Server error: %v", err)
 	}
 }

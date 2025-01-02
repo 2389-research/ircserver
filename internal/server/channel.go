@@ -1,6 +1,7 @@
 package server
 
 import (
+	"log"
 	"sync"
 	"time"
 )
@@ -16,11 +17,13 @@ type Channel struct {
 
 // NewChannel creates a new IRC channel
 func NewChannel(name string) *Channel {
-	return &Channel{
+	ch := &Channel{
 		Name:    name,
 		Created: time.Now(),
 		Clients: make(map[string]*Client),
 	}
+	log.Printf("INFO: New channel created: %s", name)
+	return ch
 }
 
 // AddClient adds a client to the channel
@@ -28,6 +31,7 @@ func (ch *Channel) AddClient(client *Client) {
 	ch.mu.Lock()
 	defer ch.mu.Unlock()
 	ch.Clients[client.nick] = client
+	log.Printf("INFO: Client %s joined channel %s", client.nick, ch.Name)
 }
 
 // RemoveClient removes a client from the channel
@@ -35,6 +39,7 @@ func (ch *Channel) RemoveClient(nickname string) {
 	ch.mu.Lock()
 	defer ch.mu.Unlock()
 	delete(ch.Clients, nickname)
+	log.Printf("INFO: Client %s left channel %s", nickname, ch.Name)
 }
 
 // SetTopic sets the channel topic

@@ -38,12 +38,12 @@ func (s *Server) Start() error {
 	}
 	defer listener.Close()
 
-	log.Printf("IRC server listening on %s", addr)
+	log.Printf("INFO: IRC server started and listening on %s", addr)
 
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
-			log.Printf("Failed to accept connection: %v", err)
+			log.Printf("ERROR: Failed to accept connection: %v", err)
 			continue
 		}
 
@@ -60,7 +60,7 @@ func (s *Server) handleConnection(conn net.Conn) {
 	for {
 		message, err := reader.ReadString('\n')
 		if err != nil {
-			log.Printf("Client %s disconnected: %v", client, err)
+			log.Printf("INFO: Client %s disconnected: %v", client, err)
 			s.removeClient(client)
 			return
 		}
@@ -100,7 +100,7 @@ func (s *Server) handleMessage(client *Client, message string) {
 	case "PING":
 		s.handlePing(client, args)
 	default:
-		log.Printf("Unknown command from %s: %s", client, command)
+		log.Printf("WARN: Unknown command from %s: %s", client, command)
 	}
 }
 
@@ -141,8 +141,11 @@ func (s *Server) handleUser(client *Client, args string) {
 	client.realname = strings.TrimPrefix(parts[3], ":")
 
 	// Send welcome messages
-	client.Send(fmt.Sprintf(":server 001 %s :Welcome to the IRC Network %s!%s@%s",
-		client.nick, client.nick, client.username, client.conn.RemoteAddr().String()))
+	welcomeMsg := fmt.Sprintf(":server 001 %s :Welcome to the IRC Network %s!%s@%s",
+		client.nick, client.nick, client.username, client.conn.RemoteAddr().String())
+	log.Printf("INFO: New client registered - Nick: %s, Username: %s, Address: %s", 
+		client.nick, client.username, client.conn.RemoteAddr().String())
+	client.Send(welcomeMsg)
 }
 
 func (s *Server) handleQuit(client *Client, args string) {
