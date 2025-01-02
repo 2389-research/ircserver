@@ -10,12 +10,10 @@ import (
 // mockStore implements persistence.Store interface for testing
 type mockStore struct{}
 
-func (m *mockStore) Close() error                                                     { return nil }
-func (m *mockStore) LogMessage(channel, nick, msg string) error                       { return nil }
-func (m *mockStore) UpdateUserInfo(nickname, username, realname, ipAddr string) error { return nil }
-func (m *mockStore) UpdateChannelInfo(name, topic string) error                       { return nil }
-func (m *mockStore) GetUserInfo(nickname string) (string, string, string, error)      { return "", "", "", nil }
-func (m *mockStore) GetChannelInfo(name string) (string, error)                       { return "", nil }
+func (m *mockStore) Close() error                                                { return nil }
+func (m *mockStore) LogMessage(sender, recipient, msgType, content string) error { return nil }
+func (m *mockStore) UpdateUser(nickname, username, realname, ipAddr string) error { return nil }
+func (m *mockStore) UpdateChannel(name, topic string) error                      { return nil }
 
 func TestChannelOperations(t *testing.T) {
 	store := &mockStore{}
