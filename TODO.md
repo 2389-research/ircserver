@@ -2,16 +2,16 @@
 
 ## Phase 1: Core IRC Server
 
--   [ ] Initialize Go module and basic TCP server skeleton
--   [ ] Accept client connections and log connection details
--   [ ] Parse and handle basic RFC 1459 commands (NICK, USER, QUIT, JOIN, PART, PRIVMSG, NOTICE, PING, PONG)
--   [ ] Maintain an in-memory registry of connected clients
+-   [x] Initialize Go module and basic TCP server skeleton
+-   [x] Accept client connections and log connection details
+-   [x] Parse and handle basic RFC 1459 commands (NICK, USER, QUIT, JOIN, PART, PRIVMSG, NOTICE, PING, PONG)
+-   [x] Maintain an in-memory registry of connected clients
 
 ## Phase 2: Channels
 
--   [ ] Create a Channel struct (name, topic, connected clients)
--   [ ] Implement JOIN and PART logic
--   [ ] Track user membership in channels
+-   [x] Create a Channel struct (name, topic, connected clients)
+-   [x] Implement JOIN and PART logic
+-   [x] Track user membership in channels
 
 ## Phase 3: Persistence
 
