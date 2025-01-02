@@ -233,3 +233,177 @@ func TestMessageEchoPrevention(t *testing.T) {
 		t.Errorf("Expected message to be delivered to other users")
 	}
 }
+
+// TestConcurrentChannelJoins tests concurrent channel joins to validate safe operation
+func TestConcurrentChannelJoins(t *testing.T) {
+	cfg := config.DefaultConfig()
+	store := &mockStore{}
+	srv := New("localhost", "0", store, cfg)
+
+	const numClients = 100
+	const numChannels = 10
+
+	clients := make([]*Client, numClients)
+	for i := 0; i < numClients; i++ {
+		mockConn := &mockConn{readData: strings.NewReader("")}
+		clients[i] = NewClient(mockConn, cfg)
+		clients[i].nick = fmt.Sprintf("user%d", i)
+		clients[i].username = fmt.Sprintf("user%d", i)
+		clients[i].realname = fmt.Sprintf("User %d", i)
+
+		srv.mu.Lock()
+		srv.clients[clients[i].nick] = clients[i]
+		srv.mu.Unlock()
+	}
+
+	var wg sync.WaitGroup
+	for i := 0; i < numClients; i++ {
+		wg.Add(1)
+		go func(client *Client) {
+			defer wg.Done()
+			for j := 0; j < numChannels; j++ {
+				channelName := fmt.Sprintf("#channel%d", j)
+				srv.handleJoin(client, channelName)
+			}
+		}(clients[i])
+	}
+
+	wg.Wait()
+
+	// Verify all clients are in all channels
+	for i := 0; i < numChannels; i++ {
+		channelName := fmt.Sprintf("#channel%d", i)
+		srv.mu.RLock()
+		channel, exists := srv.channels[channelName]
+		srv.mu.RUnlock()
+
+		if !exists {
+			t.Errorf("Expected channel %s to exist", channelName)
+			continue
+		}
+
+		channel.mu.RLock()
+		if len(channel.Members) != numClients {
+			t.Errorf("Expected %d members in channel %s, got %d", numClients, channelName, len(channel.Members))
+		}
+		channel.mu.RUnlock()
+	}
+}
+
+// TestConcurrentChannelLeaves tests concurrent channel leaves to validate safe operation
+func TestConcurrentChannelLeaves(t *testing.T) {
+	cfg := config.DefaultConfig()
+	store := &mockStore{}
+	srv := New("localhost", "0", store, cfg)
+
+	const numClients = 100
+	const numChannels = 10
+
+	clients := make([]*Client, numClients)
+	for i := 0; i < numClients; i++ {
+		mockConn := &mockConn{readData: strings.NewReader("")}
+		clients[i] = NewClient(mockConn, cfg)
+		clients[i].nick = fmt.Sprintf("user%d", i)
+		clients[i].username = fmt.Sprintf("user%d", i)
+		clients[i].realname = fmt.Sprintf("User %d", i)
+
+		srv.mu.Lock()
+		srv.clients[clients[i].nick] = clients[i]
+		srv.mu.Unlock()
+	}
+
+	// Join all clients to all channels
+	for i := 0; i < numClients; i++ {
+		for j := 0; j < numChannels; j++ {
+			channelName := fmt.Sprintf("#channel%d", j)
+			srv.handleJoin(clients[i], channelName)
+		}
+	}
+
+	var wg sync.WaitGroup
+	for i := 0; i < numClients; i++ {
+		wg.Add(1)
+		go func(client *Client) {
+			defer wg.Done()
+			for j := 0; j < numChannels; j++ {
+				channelName := fmt.Sprintf("#channel%d", j)
+				srv.handlePart(client, channelName)
+			}
+		}(clients[i])
+	}
+
+	wg.Wait()
+
+	// Verify all channels are empty
+	for i := 0; i < numChannels; i++ {
+		channelName := fmt.Sprintf("#channel%d", i)
+		srv.mu.RLock()
+		channel, exists := srv.channels[channelName]
+		srv.mu.RUnlock()
+
+		if exists {
+			channel.mu.RLock()
+			if len(channel.Members) != 0 {
+				t.Errorf("Expected 0 members in channel %s, got %d", channelName, len(channel.Members))
+			}
+			channel.mu.RUnlock()
+		}
+	}
+}
+
+// TestConcurrentMessageDeliveries tests concurrent message deliveries to validate safe operation
+func TestConcurrentMessageDeliveries(t *testing.T) {
+	cfg := config.DefaultConfig()
+	store := &mockStore{}
+	srv := New("localhost", "0", store, cfg)
+
+	const numClients = 100
+	const numChannels = 10
+	const numMessages = 1000
+
+	clients := make([]*Client, numClients)
+	for i := 0; i < numClients; i++ {
+		mockConn := &mockConn{readData: strings.NewReader("")}
+		clients[i] = NewClient(mockConn, cfg)
+		clients[i].nick = fmt.Sprintf("user%d", i)
+		clients[i].username = fmt.Sprintf("user%d", i)
+		clients[i].realname = fmt.Sprintf("User %d", i)
+
+		srv.mu.Lock()
+		srv.clients[clients[i].nick] = clients[i]
+		srv.mu.Unlock()
+	}
+
+	// Join all clients to all channels
+	for i := 0; i < numClients; i++ {
+		for j := 0; j < numChannels; j++ {
+			channelName := fmt.Sprintf("#channel%d", j)
+			srv.handleJoin(clients[i], channelName)
+		}
+	}
+
+	var wg sync.WaitGroup
+	for i := 0; i < numMessages; i++ {
+		wg.Add(1)
+		go func(msgNum int) {
+			defer wg.Done()
+			client := clients[msgNum%numClients]
+			channel := fmt.Sprintf("#channel%d", msgNum%numChannels)
+			msg := fmt.Sprintf("Message %d", msgNum)
+			srv.deliverMessage(client, channel, "PRIVMSG", msg)
+		}(i)
+	}
+
+	wg.Wait()
+
+	// Verify message delivery
+	for i := 0; i < numClients; i++ {
+		client := clients[i]
+		for j := 0; j < numChannels; j++ {
+			channelName := fmt.Sprintf("#channel%d", j)
+			if !strings.Contains(client.conn.(*mockConn).writeData.String(), channelName) {
+				t.Errorf("Expected messages to be delivered to channel %s for client %s", channelName, client.nick)
+			}
+		}
+	}
+}

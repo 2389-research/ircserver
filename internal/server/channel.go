@@ -105,19 +105,19 @@ func NewChannel(name string) *Channel {
 // AddClient adds a client to the channel with specified mode.
 func (ch *Channel) AddClient(client *Client, mode UserMode) {
 	ch.mu.Lock()
-	defer ch.mu.Unlock()
 	ch.Members[client.nick] = &ChannelMember{
 		Client: client,
 		Mode:   mode,
 	}
+	ch.mu.Unlock()
 	log.Printf("INFO: Client %s joined channel %s with mode %v", client.nick, ch.Name, mode)
 }
 
 // RemoveClient removes a client from the channel.
 func (ch *Channel) RemoveClient(nickname string) {
 	ch.mu.Lock()
-	defer ch.mu.Unlock()
 	delete(ch.Members, nickname)
+	ch.mu.Unlock()
 	log.Printf("INFO: Client %s left channel %s", nickname, ch.Name)
 
 	// If channel is empty, it should be cleaned up by the server
@@ -129,8 +129,8 @@ func (ch *Channel) RemoveClient(nickname string) {
 // SetTopic sets the channel topic.
 func (ch *Channel) SetTopic(topic string) {
 	ch.mu.Lock()
-	defer ch.mu.Unlock()
 	ch.Topic = topic
+	ch.mu.Unlock()
 }
 
 // GetTopic returns the channel topic.
