@@ -36,7 +36,7 @@ func DefaultConfig() *Config {
 	if envName := os.Getenv("IRC_SERVER_NAME"); envName != "" {
 		cfg.Server.Name = envName
 	} else {
-		cfg.Server.Name = "IRC Server"
+		cfg.Server.Name = "My IRC Server"
 	}
 	cfg.Server.Host = "localhost"
 	cfg.Server.Port = "6667"
