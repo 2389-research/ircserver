@@ -120,8 +120,13 @@ func (c *Client) handleConnection() error {
 		cmd := parts[0]
 		
 		if cmd == "NICK" {
+			var nick string
 			if len(parts) < 2 {
-				nick := ""
+				nick = ""
+			} else {
+				nick = strings.TrimSpace(strings.Join(parts[1:], " "))
+			}
+			
 			if nick == "" {
 				if err := c.Send("431 * :No nickname given"); err != nil {
 					return err
