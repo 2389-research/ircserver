@@ -1,8 +1,10 @@
 package server
 
 import (
+	"bufio"
 	"encoding/json"
 	"html/template"
+	"io"
 	"log"
 	"net/http"
 	"sync"
@@ -134,6 +136,7 @@ func (ws *WebServer) handleAPISend(w http.ResponseWriter, r *http.Request) {
 		nick:     "WebAdmin",
 		username: "webadmin",
 		realname: "Web Interface Administrator",
+		writer:   bufio.NewWriter(io.Discard), // Add a dummy writer
 	}
 
 	ws.ircServer.deliverMessage(adminClient, msg.Target, "PRIVMSG", msg.Content)
