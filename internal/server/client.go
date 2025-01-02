@@ -133,9 +133,6 @@ func (c *Client) pingLoop() {
 				})
 			}
 			c.mu.Unlock()
-				log.Printf("INFO: Client %s timed out - no PONG response", c.String())
-				c.conn.Close()
-			})
 		}
 	}
 }
