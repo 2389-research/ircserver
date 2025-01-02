@@ -449,15 +449,14 @@ func (s *Server) handlePart(client *Client, args string) {
 		return
 	}
 
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	
 	channels := strings.Split(args, ",")
 	for _, channelName := range channels {
 		channelName = strings.TrimSpace(channelName)
 
-		// Get channel under read lock first
-		s.mu.RLock()
 		channel, exists := s.channels[channelName]
-		s.mu.RUnlock()
-
 		if !exists {
 			if err := client.Send(fmt.Sprintf(":server 403 %s %s :No such channel", client.nick, channelName)); err != nil {
 				log.Printf("ERROR: Failed to send no such channel error: %v", err)
@@ -479,22 +478,17 @@ func (s *Server) handlePart(client *Client, args string) {
 			log.Printf("ERROR: Failed to broadcast PART message: %v", err)
 		}
 
-		// Now take the write lock to modify channel state
-		s.mu.Lock()
-		if ch, stillExists := s.channels[channelName]; stillExists {
-			ch.RemoveClient(client.nick)
-			delete(client.channels, channelName)
+		channel.RemoveClient(client.nick)
+		delete(client.channels, channelName)
 
-			// Check if channel is empty and remove it if so
-			if len(ch.Members) == 0 {
-				delete(s.channels, channelName)
-				ctx := context.Background()
-				if err := s.logger.LogEvent(ctx, EventChannelDelete, client, channelName, "Channel removed - last user left"); err != nil {
-					log.Printf("ERROR: Failed to log channel deletion: %v", err)
-				}
+		// Check if channel is empty and remove it if so
+		if len(channel.Members) == 0 {
+			delete(s.channels, channelName)
+			ctx := context.Background()
+			if err := s.logger.LogEvent(ctx, EventChannelDelete, client, channelName, "Channel removed - last user left"); err != nil {
+				log.Printf("ERROR: Failed to log channel deletion: %v", err)
 			}
 		}
-		s.mu.Unlock()
 
 		// Log the PART event
 		ctx := context.Background()
