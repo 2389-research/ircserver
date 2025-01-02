@@ -211,7 +211,7 @@ func (c *Client) processMessageQueue() {
 			
 			// Check rate limit
 			if c.msgCount < 10 { // Max 10 messages per 2 seconds
-				if err := c.writer.WriteString(msg + "\r\n"); err == nil {
+				if _, err := c.writer.WriteString(msg + "\r\n"); err == nil {
 					c.writer.Flush()
 					c.msgCount++
 				}
