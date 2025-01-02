@@ -139,7 +139,12 @@ func TestConcurrentDatabaseAccess(t *testing.T) {
 	store := setupTestDB(t)
 	defer store.Close()
 
+	// Ensure tables exist by doing an initial insert
 	ctx := context.Background()
+	if err := store.UpdateUser(ctx, "init", "init", "Initial User", "127.0.0.1"); err != nil {
+		t.Fatalf("Failed to initialize database: %v", err)
+	}
+
 	var wg sync.WaitGroup
 	numGoroutines := 10
 
