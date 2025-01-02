@@ -3,3 +3,5 @@
 output.txt
 coverage.out
 coverage.html
+./ircserver
+./irc.db
