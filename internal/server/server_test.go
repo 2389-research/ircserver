@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"ircserver/internal/config"
 	"ircserver/internal/persistence"
 	"strings"
@@ -85,14 +86,14 @@ func TestChannelMultiUserOperations(t *testing.T) {
 	}
 
 	// Test topic changes
-	srv.handleTopic(clients[0], "#test", "New Topic")
+	srv.handleTopic(clients[0], "#test :New Topic")
 	if channel.Topic != "New Topic" {
 		t.Errorf("Expected topic 'New Topic', got '%s'", channel.Topic)
 	}
 
 	// Test message broadcasting
 	mockConn := clients[1].conn.(*mockConn)
-	srv.handlePrivMsg(clients[0], "#test", "Hello channel!")
+	srv.handlePrivMsg(clients[0], "#test :Hello channel!")
 	if !strings.Contains(mockConn.writeData.String(), "Hello channel!") {
 		t.Error("Expected message to be broadcasted to other clients")
 	}
