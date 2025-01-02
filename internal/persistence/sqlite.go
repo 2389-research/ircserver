@@ -10,6 +10,7 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
+
 // Ensure SQLiteStore implements Store interface.
 var _ Store = (*SQLiteStore)(nil)
 
@@ -20,6 +21,7 @@ type SQLiteStore struct {
 
 // New creates a new database connection and initializes tables.
 func New(dbPath string) (*SQLiteStore, error) {
+	store := &SQLiteStore{}
 	db, err := sql.Open("sqlite3", dbPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database: %v", err)
@@ -30,7 +32,8 @@ func New(dbPath string) (*SQLiteStore, error) {
 		return nil, err
 	}
 
-	return &SQLiteStore{db: db}, nil
+	store.db = db
+	return store, nil
 }
 
 // Close closes the database connection.
@@ -106,4 +109,10 @@ func (s *SQLiteStore) UpdateChannel(ctx context.Context, name, topic string) err
 		log.Printf("ERROR: Failed to update channel: %v", err)
 	}
 	return err
+}
+
+// QueryRow executes a query that returns a single row and scans the result into dest.
+// This method is primarily intended for testing.
+func (s *SQLiteStore) QueryRow(ctx context.Context, query string, args ...interface{}) *sql.Row {
+	return s.db.QueryRowContext(ctx, query, args...)
 }
